@@ -948,6 +948,8 @@ func createTask(s *xorm.Session, t *Task, a web.Auth, updateAssignees bool, setB
 
 	t.HexColor = utils.NormalizeHex(t.HexColor)
 
+	t.Description = utils.ConvertMarkdownToHTML(t.Description)
+
 	_, err = s.Insert(t)
 	if err != nil {
 		return err
@@ -1425,6 +1427,7 @@ func (t *Task) updateSingleTask(s *xorm.Session, a web.Auth, fields []string) (e
 		ot.CoverImageAttachmentID = 0
 	}
 
+	ot.Description = utils.ConvertMarkdownToHTML(ot.Description)
 	_, err = s.ID(t.ID).
 		Cols(colsToUpdate...).
 		Update(&ot)
