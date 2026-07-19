@@ -38,6 +38,8 @@ func (p *ProjectViewKind) MarshalJSON() ([]byte, error) {
 		return []byte(`"table"`), nil
 	case ProjectViewKindKanban:
 		return []byte(`"kanban"`), nil
+	case ProjectViewKindLabeled:
+		return []byte(`"labeled"`), nil
 	}
 
 	return []byte(`null`), nil
@@ -59,6 +61,8 @@ func (p *ProjectViewKind) UnmarshalJSON(bytes []byte) error {
 		*p = ProjectViewKindTable
 	case "kanban":
 		*p = ProjectViewKindKanban
+	case "labeled":
+		*p = ProjectViewKindLabeled
 	default:
 		return fmt.Errorf("unknown project view kind: %s", value)
 	}
@@ -75,6 +79,7 @@ const (
 	ProjectViewKindGantt
 	ProjectViewKindTable
 	ProjectViewKindKanban
+	ProjectViewKindLabeled
 )
 
 type BucketConfigurationModeKind int
@@ -135,8 +140,8 @@ type ProjectView struct {
 	Title string `xorm:"varchar(255) not null" json:"title" valid:"required,runelength(1|250)"`
 	// The project this view belongs to
 	ProjectID int64 `xorm:"not null index" json:"project_id" param:"project"`
-	// The kind of this view. Can be `list`, `gantt`, `table` or `kanban`.
-	ViewKind ProjectViewKind `xorm:"not null" json:"view_kind" swaggertype:"string" enums:"list,gantt,table,kanban"`
+	// The kind of this view. Can be `list`, `gantt`, `table`, `kanban` or `labeled`.
+	ViewKind ProjectViewKind `xorm:"not null" json:"view_kind" swaggertype:"string" enums:"list,gantt,table,kanban,labeled"`
 
 	// The filter query to match tasks by. Check out https://vikunja.io/docs/filters for a full explanation.
 	Filter *TaskCollection `xorm:"json null default null" query:"filter" json:"filter"`
@@ -147,6 +152,8 @@ type ProjectView struct {
 	BucketConfigurationMode BucketConfigurationModeKind `xorm:"default 0" json:"bucket_configuration_mode" swaggertype:"string" enums:"none,manual,filter,manual"`
 	// When the bucket configuration mode is not `manual`, this field holds the options of that configuration.
 	BucketConfiguration []*ProjectViewBucketConfiguration `xorm:"json" json:"bucket_configuration"`
+	// Determines how columns are sorted in a labeled view. Can be `task_count`, `title_asc` or `title_desc`. Only meaningful when the view kind is `labeled`.
+	BucketConfigurationSortBy string `xorm:"varchar(50) null" json:"bucket_configuration_sort_by" valid:"-"`
 	// The ID of the bucket where new tasks without a bucket are added to. By default, this is the leftmost bucket in a view.
 	DefaultBucketID int64 `xorm:"bigint INDEX null" json:"default_bucket_id"`
 	// If tasks are moved to the done bucket, they are marked as done. If they are marked as done individually, they are moved into the done bucket.
@@ -432,6 +439,7 @@ func (pv *ProjectView) Update(s *xorm.Session, _ web.Auth) (err error) {
 			"position",
 			"bucket_configuration_mode",
 			"bucket_configuration",
+			"bucket_configuration_sort_by",
 			"default_bucket_id",
 			"done_bucket_id",
 		).
@@ -540,11 +548,25 @@ func CreateDefaultViewsForProject(s *xorm.Session, project *Project, a web.Auth,
 		return
 	}
 
+	labeled := &ProjectView{
+		ProjectID:                 project.ID,
+		Title:                     "Labeled",
+		ViewKind:                  ProjectViewKindLabeled,
+		Filter:                    &TaskCollection{Filter: "done = false"},
+		Position:                  500,
+		BucketConfigurationSortBy: "task_count",
+	}
+	err = createProjectView(s, labeled, a, createBacklogBucket, true)
+	if err != nil {
+		return
+	}
+
 	project.Views = []*ProjectView{
 		list,
 		gantt,
 		table,
 		kanban,
+		labeled,
 	}
 
 	return
