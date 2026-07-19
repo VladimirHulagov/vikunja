@@ -41,7 +41,7 @@
 import {computed, onMounted, watch} from 'vue'
 
 import {useLabelCategoriesStore} from '@/stores/labelCategories'
-import {useLabelStore} from '@/stores/labels'
+import {useLabeledStore} from '@/stores/labeled'
 
 import type {ILabelCategory} from '@/modelTypes/ILabelCategory'
 
@@ -60,13 +60,23 @@ const ALL = 0
 const UNCATEGORIZED = -1
 
 const categoriesStore = useLabelCategoriesStore()
-const labelStore = useLabelStore()
+const labeledStore = useLabeledStore()
 
 const categories = computed<readonly ILabelCategory[]>(() => categoriesStore.categories as readonly ILabelCategory[])
 
-const projectLabels = computed(() => {
-	const all = labelStore.labelsArray as unknown as Array<{id: number, projectId: number}>
-	return all.filter(l => l.projectId === props.projectId)
+// Project labels = labels that appear as columns in the labeled view when no
+// category filter is active. These are exactly the labels used by tasks in
+// this project. We pull them from the labeled store rather than the global
+// label store because Vikunja labels are user-scoped, not project-scoped —
+// `label.projectId` is just the origin project, not the using project.
+const projectLabelIds = computed<Set<number>>(() => {
+	const ids = new Set<number>()
+	for (const group of labeledStore.groups ?? []) {
+		if (group?.label?.id) {
+			ids.add(group.label.id)
+		}
+	}
+	return ids
 })
 
 const categorizedIds = computed(() => categoriesStore.getLabelsInAnyCategory(props.projectId))
@@ -74,8 +84,8 @@ const categorizedIds = computed(() => categoriesStore.getLabelsInAnyCategory(pro
 const uncategorizedCount = computed(() => {
 	const categorized = categorizedIds.value
 	let count = 0
-	for (const label of projectLabels.value) {
-		if (!categorized.has(label.id)) {
+	for (const labelId of projectLabelIds.value) {
+		if (!categorized.has(labelId)) {
 			count++
 		}
 	}
@@ -111,17 +121,6 @@ async function reload() {
 onMounted(reload)
 
 watch(() => props.projectId, reload)
-
-// Keep the label store loaded so the "uncategorized" count is accurate.
-onMounted(async () => {
-	if (props.projectId) {
-		try {
-			await labelStore.loadAllLabels()
-		} catch {
-			// best-effort; counts will simply be off if this fails.
-		}
-	}
-})
 </script>
 
 <style lang="scss" scoped>

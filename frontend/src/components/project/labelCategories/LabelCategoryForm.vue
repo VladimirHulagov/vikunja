@@ -95,7 +95,11 @@ const isSaving = ref(false)
 const isEditMode = computed(() => !!props.category && typeof props.category.id === 'number' && props.category.id > 0)
 
 const projectLabels = computed<ILabel[]>(() => {
-	return (labelStore.labelsArray as readonly ILabel[]).filter(l => l.projectId === props.projectId)
+	// Vikunja labels are user-scoped (created by a user, usable on any task).
+	// The `projectId` field on a label is just where it was originally created,
+	// not where it's used. Show the user's full label library so they can pick
+	// any of their existing labels for this category.
+	return (labelStore.labelsArray as readonly ILabel[]) as ILabel[]
 })
 
 const canSave = computed(() => title.value.trim() !== '')
