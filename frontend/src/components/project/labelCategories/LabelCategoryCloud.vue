@@ -140,7 +140,10 @@ watch(() => props.projectId, reload)
 	border-radius: $radius;
 	border: 1px solid var(--grey-300);
 	background: var(--grey-100);
-	color: var(--text);
+	// Use --text-strong so the chip text is high-contrast against the
+	// chip background in both light and dark themes. (In dark mode
+	// --text-light counter-intuitively maps to a DARK grey, so we avoid it.)
+	color: var(--text-strong);
 	cursor: pointer;
 	font-size: .85rem;
 
@@ -157,7 +160,8 @@ watch(() => props.projectId, reload)
 
 	.count {
 		background: var(--grey-200);
-		color: var(--text-light);
+		color: var(--text-strong);
+		opacity: .8;
 		border-radius: $radius;
 		padding: 0 .35rem;
 		font-size: .75rem;
@@ -165,6 +169,7 @@ watch(() => props.projectId, reload)
 		.is-active & {
 			background: rgba(255, 255, 255, .25);
 			color: inherit;
+			opacity: 1;
 		}
 	}
 }

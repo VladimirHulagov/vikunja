@@ -111,7 +111,7 @@ export const useLabelCategoriesStore = defineStore('labelCategories', () => {
 	}
 
 	return {
-		categories: readonly(categories),
+		categories,
 		isLoading: readonly(isLoading),
 
 		load,
