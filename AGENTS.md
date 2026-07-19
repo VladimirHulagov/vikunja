@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Vikunja is a comprehensive todo and task management application with a Vue.js frontend and Go backend. It supports multiple project views (List, Kanban, Gantt, Table), team collaboration, file attachments, and extensive integrations.
+Vikunja is a comprehensive todo and task management application with a Vue.js frontend and Go backend. It supports multiple project views (List, Kanban, Gantt, Table, **Labeled** — custom), team collaboration, file attachments, and extensive integrations.
 
 The project consists of:
 - `pkg/` – Go code for the API service
@@ -287,3 +287,86 @@ The license system in `pkg/license/` funds Vikunja's ongoing development. Vikunj
 - Event listeners in `pkg/*/listeners.go` must be registered properly
 - CORS settings in backend must allow frontend domain
 - API tokens have different scopes - check permissions carefully
+
+## Fork-Specific Features (VladimirHulagov/vikunja)
+
+This fork extends upstream Vikunja with two related features for tag-based task organisation. Both are merged on branch `feat-labeled-view`. Specs are in `plans/feat-labeled-view.md` and `plans/feat-label-categories.md`.
+
+### 1. Labeled View (Канбан по тегам)
+
+A fifth project view kind, **`ProjectViewKindLabeled`** (JSON `"labeled"`, integer `4`), available alongside List/Gantt/Table/Kanban. The button appears in the view switcher after Kanban; Russian label "Маркированный".
+
+**Concept:** tasks grouped by label as columns. Differs from Kanban in that columns are derived dynamically from `label_tasks` — no `task_buckets` involvement. A task with N labels appears in N columns simultaneously.
+
+**Key files:**
+- Backend:
+  - `pkg/models/project_view.go` — `ProjectViewKindLabeled` enum value + `BucketConfigurationSortBy` field on `ProjectView`
+  - `pkg/models/labeled_view.go` — `LabeledViewResponse`, `LabeledGroup`, `GetLabeledViewGroups(...)`. The dispatch site is in `pkg/models/task_collection.go` `readLabeledView`.
+  - `pkg/migration/20260719025313.go` — adds `bucket_configuration_sort_by` column and seeds a "Labeled" view row for every existing project (filter `'{"filter":"done = false"}'`, position `500`, sort `task_count`)
+- Frontend:
+  - `frontend/src/components/project/views/ProjectLabeled.vue` — main component (drag-and-drop between columns = replace label)
+  - `frontend/src/stores/labeled.ts` — Pinia store
+  - `frontend/src/services/labeledView.ts` — service (separate from `taskCollection.ts` because response is an object, not array)
+  - `frontend/src/modelTypes/ILabeledView.ts`, `frontend/src/models/labeledGroup.ts`
+  - `frontend/src/components/project/ProjectWrapper.vue` — `getViewTitle()` switch was extended to translate "Labeled" via i18n (without this fix the button shows the raw English title from the DB row)
+
+**UX rules** (locked-in by user during brainstorming):
+- Drag task between columns = **replace source label with target label** (other labels preserved). Implemented via DELETE `/tasks/:id/labels/:from` + POST `/tasks/:id/labels` to `/to`
+- Tasks inside a column are **auto-sorted** (priority desc, due_date asc, id desc) — drag-within is disabled
+- Default filter is `done = false` (toggleable via "Скрыть выполненные" checkbox, which manipulates the filter string)
+- "Без меток" column shows tasks with no labels; appears only when such tasks exist; hidden when a category filter is active
+- New projects automatically get a 5th "Labeled" view via `CreateDefaultViewsForProject`
+
+### 2. Label Categories (Группы меток)
+
+Per-project grouping of labels into meta-categories. Visible as a chip cloud above the Labeled view's columns. Click a chip → columns filter to labels in that category. Management via a "Колонны" button next to "ФИЛЬТРЫ" that opens a modal (similar to FilterPopup).
+
+**Concept:** `LabelCategory` is a new per-project entity (NOT a label itself, NOT a view kind). Many-to-many with `Label` via `label_category_members`. Different from saved filters or view kinds — it's purely a Labeled-view-specific UI layer.
+
+**Key files:**
+- Backend:
+  - `pkg/models/label_category.go` — `LabelCategory` + `LabelCategoryMember` structs, CRUD, permissions (delegate to `Project.CanRead`/`CanWrite`)
+  - `pkg/routes/api/v1/label_category.go` — REST routes under `/projects/:project/label-categories`
+  - `pkg/models/labeled_view.go` — `GetLabeledViewGroups` accepts a `labelCategoryID int64` (last parameter): `0` = all, `N>0` = members of N, `-1` = labels in no category of this project. When non-zero, `UntaggedGroup` is suppressed (nil).
+  - `pkg/models/task_collection.go` — reads `?category=N` query param into `TaskCollection.LabelCategoryID`
+  - `pkg/migration/20260719150255.go` — creates `label_categories` + `label_category_members` tables (no data seeding)
+- Frontend:
+  - `frontend/src/components/project/labelCategories/LabelCategoryCloud.vue` — chip cloud, filter-only (no inline CRUD)
+  - `frontend/src/components/project/labelCategories/LabelCategoryModal.vue` — "Колонны" button + modal with list/form modes
+  - `frontend/src/components/project/labelCategories/LabelCategoryForm.vue` — name input + label toggle cloud; create or edit
+  - `frontend/src/stores/labelCategories.ts` — Pinia store (`load`, `create`, `update`, `remove`, `getLabelsInAnyCategory`)
+  - `frontend/src/services/labelCategory.ts`, `frontend/src/models/labelCategory.ts`, `frontend/src/modelTypes/ILabelCategory.ts`
+  - URL query param `?category=N`: `0` (or absent) = "Все метки", `N` = specific category, `-1` = "Без категории"
+
+**Gotchas specific to this feature** (found the hard way — read before extending):
+- **Pagination**: `ReadAll` must use `getLimitFromPageIndex(page, perPage)` (the standard Vikunja helper). Naive `page*perPage` is off-by-one — with `page=1, perPage=50` it produces `LIMIT 50 OFFSET 50` and returns nothing for projects with fewer than 50 categories. Commit `aadba7fa2` fixed this.
+- **Pinia setup-store reactivity**: return `categories` directly, NOT `readonly(categories)`. The `readonly()` wrapper breaks reactivity propagation to consumers when the underlying ref is reassigned. The working pattern is in `frontend/src/stores/labeled.ts` (returns `groups` raw).
+- **Labels are user-scoped, not project-scoped**: `label.projectId` is the project where a label was *created*, not the projects where it's *used*. Filtering the global label store by `l.projectId === currentProjectId` is wrong — it hides most labels. The correct source of "labels used in this project" is `labeledStore.groups` (each group's `.label` is a label used by some task in this project). See `LabelCategoryForm.vue` and `LabelCategoryCloud.vue`.
+- **Dark theme text colors**: `var(--text-light)` is *counter-intuitively dark* in dark mode (the light/dark semantic inverts). For text that must read well in both themes, use `var(--text)` or `var(--text-strong)`. See `.category-chip` SCSS for the working pattern.
+- **View button translation**: `ProjectWrapper.vue:getViewTitle()` is a switch over the view title string. When adding a new view kind, you MUST add a case there mapping the title to an i18n key, or the button shows the raw DB string regardless of locale.
+
+### Build for production (scratch container)
+
+The deployment runs `vikunja/vikunja:2.3.0` as a Docker image but mounts a locally-built binary at `./vikunja/vikunja-fixed:/app/vikunja/vikunja:ro`. The container is `FROM scratch` (musl-free, no libc), so the binary must be statically linked:
+
+```bash
+cd /mnt/services/vikunja/feat-labeled-view/frontend && pnpm build
+cd /mnt/services/vikunja/feat-labeled-view && \
+  CGO_ENABLED=0 go build -tags "netgo osusergo" -ldflags "-s -w" -o vikunja-static
+```
+
+A plain `mage build` produces a dynamically-linked binary that fails with `exec /app/vikunja/vikunja: no such file or directory` in the container.
+
+Deploy:
+```bash
+docker stop vikunja-vikunja-1
+cp /mnt/services/vikunja/feat-labeled-view/vikunja-static /mnt/services/vikunja/vikunja/vikunja-fixed
+docker start vikunja-vikunja-1
+# migrations run automatically on startup; check: docker logs vikunja-vikunja-1 --tail 50 | grep -i migration
+```
+
+`vikunja-static` is gitignored (committed by accident once; don't repeat).
+
+### Local customizations bundled into this fork
+
+`frontend/src/components/input/editor/TipTap.vue`, `frontend/src/main.ts`, `pkg/routes/caldav/listStorageProvider.go` carry small WIP patches (markdown rendering in TipTap, PWA service worker disabled, CalDAV aggregate-path 404→207 fix). When rebasing on upstream, preserve these — they are in commit `eb0de235b`.
