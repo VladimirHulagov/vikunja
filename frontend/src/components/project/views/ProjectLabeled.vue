@@ -14,6 +14,12 @@
 					:project-id="projectId"
 					@update:modelValue="updateFilters"
 				/>
+				<FancyCheckbox
+					v-model="hideDone"
+					class="hide-done-toggle"
+				>
+					{{ $t('project.labeled.hideDone') }}
+				</FancyCheckbox>
 			</div>
 		</template>
 
@@ -142,6 +148,7 @@ import ProjectWrapper from '@/components/project/ProjectWrapper.vue'
 import FilterPopup from '@/components/project/partials/FilterPopup.vue'
 import KanbanCard from '@/components/tasks/partials/KanbanCard.vue'
 import XButton from '@/components/input/Button.vue'
+import FancyCheckbox from '@/components/input/FancyCheckbox.vue'
 
 import {error as showError} from '@/message'
 
@@ -237,6 +244,33 @@ function updateFilters(newParams: TaskFilterParams) {
 	filter.value = newParams.filter || undefined
 	s.value = newParams.s || undefined
 }
+
+// Hide-done toggle. The view's default filter is `done = false` (set by
+// migration); we expose it as a single checkbox next to the filter popup so
+// users don't have to hand-edit the filter string.
+const DONE_FALSE_RE = /(^|\s)&&\s*done\s*=\s*false(?=\s|$)|(^|\s)done\s*=\s*false(\s*&&)?/i
+
+const hideDone = computed<boolean>({
+	get() {
+		const f = (params.value.filter ?? '').trim()
+		if (f === '') return false
+		// Match `done = false` standalone or as part of an && chain.
+		return /\bdone\s*=\s*false\b/i.test(f)
+	},
+	set(v: boolean) {
+		const f = (params.value.filter ?? '').trim()
+		let next: string
+		if (v) {
+			next = f === '' ? 'done = false' : `(${f}) && done = false`
+		} else {
+			// Remove `done = false` (and the wrapping parens we may have added).
+			next = f.replace(DONE_FALSE_RE, '$1').replace(/\(\s*\)&&/i, '').replace(/\(\s*&&/i, '(').trim()
+			next = next.replace(/^\(\s*(.*?)\s*\)$/, '$1').trim()
+		}
+		const newParams = {...params.value, filter: next}
+		updateFilters(newParams)
+	},
+})
 
 watch(
 	() => ({
@@ -387,6 +421,17 @@ $column-header-height: 60px;
 $column-right-margin: 1rem;
 $crazy-height-calculation: '100vh - 4.5rem - 1.5rem - 1rem - 1.5rem - 11px';
 $filter-container-height: '1rem - #{$switch-view-height}';
+
+.filter-container {
+	display: flex;
+	align-items: center;
+	gap: 1rem;
+	flex-wrap: wrap;
+}
+
+.hide-done-toggle {
+	margin: 0;
+}
 
 .labeled {
 	overflow-x: auto;
