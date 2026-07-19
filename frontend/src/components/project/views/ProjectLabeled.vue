@@ -534,7 +534,12 @@ $filter-container-height: '1rem - #{$switch-view-height}';
 		margin: 0 $column-right-margin 0 0;
 		max-block-size: calc(100% - 1rem);
 		min-block-size: 20px;
+		// Fixed-width columns: don't grow, don't shrink, basis = $column-width.
+		// Without flex-shrink: 0 the columns collapse to thin stripes when
+		// there are many of them and the container has overflow-x: auto.
+		flex: 0 0 $column-width;
 		inline-size: $column-width;
+		min-inline-size: $column-width;
 		display: flex;
 		flex-direction: column;
 		overflow: hidden;
