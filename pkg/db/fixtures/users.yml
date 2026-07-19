@@ -164,3 +164,13 @@
   avatar_provider: 'openid'
   updated: 2018-12-02 15:13:12
   created: 2018-12-01 15:13:12
+# Dedicated owner of the labeled-view test project (project 100). Using a
+# separate user keeps all labeled-view fixtures isolated from user 1 / 6
+# assertions in TestTaskCollection_ReadAll, TestLabel_ReadAll, etc.
+- id: 100
+  username: 'labeled_view_owner'
+  password: '$2a$04$X4aRMEt0ytgPwMIgv36cI..7X9.nhY/.tYwxpqSi0ykRHx2CwQ0S6'
+  email: 'labeled_view_owner@example.com'
+  issuer: local
+  updated: 2018-12-02 15:13:12
+  created: 2018-12-01 15:13:12

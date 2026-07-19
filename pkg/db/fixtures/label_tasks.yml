@@ -33,3 +33,43 @@
   task_id: 34
   label_id: 8
   created: 2018-12-01 15:13:12
+# --- Labeled view test fixtures ---
+# Tasks 100-114 all live in project 100 (see projects.yml), which is owned by
+# user 100 and not accessible to anyone else. This isolation means the
+# additions don't disturb user-1 / user-6 assertions in other tests.
+# Task #100 is the multi-label case (carries label 100 AND 101).
+- id: 100
+  task_id: 100
+  label_id: 100
+  created: 2018-12-01 15:13:12
+- id: 101
+  task_id: 100
+  label_id: 101
+  created: 2018-12-01 15:13:12
+- id: 102
+  task_id: 101
+  label_id: 100
+  created: 2018-12-01 15:13:12
+- id: 103
+  task_id: 102
+  label_id: 100
+  created: 2018-12-01 15:13:12
+- id: 104
+  task_id: 103
+  label_id: 101
+  created: 2018-12-01 15:13:12
+- id: 105
+  task_id: 104
+  label_id: 101
+  created: 2018-12-01 15:13:12
+- id: 106
+  task_id: 105
+  label_id: 101
+  created: 2018-12-01 15:13:12
+# Label 102 only attached to the DONE task #106 in project 100 — verifies
+# labels whose only matching project-100 task is done are hidden under the
+# default `done = false` filter.
+- id: 107
+  task_id: 106
+  label_id: 102
+  created: 2018-12-01 15:13:12

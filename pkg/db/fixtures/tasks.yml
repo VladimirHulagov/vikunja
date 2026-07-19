@@ -447,3 +447,120 @@
   index: 1
   created: 2018-12-01 01:12:04
   updated: 2018-12-01 01:12:04
+# --- Tasks for labeled view tests (project 100, owner user 100) ---
+# Layout (only project 100, all done=false unless noted):
+#   #100 priority=100, due_date=2018-12-10 → labels 100, 101 (MULTI-LABEL)
+#   #101 priority=1                    → label 100
+#   #102 priority=0, due_date=2018-12-05 → label 100
+#   #103 priority=0, due_date=2018-12-03 → label 101
+#   #104 priority=0, due_date=2018-12-04 → label 101
+#   #105 priority=0                    → label 101
+#   #106 priority=0, done=TRUE          → label 102 (label only on done task)
+#   #107..#111 priority=0, no labels   → untagged
+# So under `done = false`:
+#   label 100 (AA): #100, #101, #102           (count 3)
+#   label 101 (BB): #100, #103, #104, #105     (count 4)
+#   label 102 (ZZ): hidden (only on done #106)
+#   untagged: #107..#111                       (count 5)
+- id: 100
+  title: 'labeled task #100 multi-label high prio'
+  done: false
+  created_by_id: 100
+  project_id: 100
+  index: 1
+  priority: 100
+  due_date: 2018-12-10 22:25:24
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 101
+  title: 'labeled task #101 low prio'
+  done: false
+  created_by_id: 100
+  project_id: 100
+  index: 2
+  priority: 1
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 102
+  title: 'labeled task #102 due date'
+  done: false
+  created_by_id: 100
+  project_id: 100
+  index: 3
+  due_date: 2018-12-05 22:25:24
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 103
+  title: 'labeled task #103 earlier due date'
+  done: false
+  created_by_id: 100
+  project_id: 100
+  index: 4
+  due_date: 2018-12-03 22:25:24
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 104
+  title: 'labeled task #104 middle due date'
+  done: false
+  created_by_id: 100
+  project_id: 100
+  index: 5
+  due_date: 2018-12-04 22:25:24
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 105
+  title: 'labeled task #105 no due date'
+  done: false
+  created_by_id: 100
+  project_id: 100
+  index: 6
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 106
+  title: 'labeled task #106 done'
+  done: true
+  created_by_id: 100
+  project_id: 100
+  index: 7
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 107
+  title: 'untagged task #107'
+  done: false
+  created_by_id: 100
+  project_id: 100
+  index: 8
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 108
+  title: 'untagged task #108'
+  done: false
+  created_by_id: 100
+  project_id: 100
+  index: 9
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 109
+  title: 'untagged task #109'
+  done: false
+  created_by_id: 100
+  project_id: 100
+  index: 10
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 110
+  title: 'untagged task #110'
+  done: false
+  created_by_id: 100
+  project_id: 100
+  index: 11
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 111
+  title: 'untagged task #111'
+  done: false
+  created_by_id: 100
+  project_id: 100
+  index: 12
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04

@@ -365,20 +365,14 @@ func (tf *TaskCollection) ReadAll(s *xorm.Session, a web.Auth, search string, pa
 	opts.isSavedFilter = tf.isSavedFilter
 
 	if view != nil {
-		var hasOrderByPosition bool
-		for _, param := range opts.sortby {
-			if param.sortBy == taskPropertyPosition {
-				hasOrderByPosition = true
-				break
-			}
-		}
-		if !hasOrderByPosition {
-			opts.sortby = append(opts.sortby, &sortParam{
-				projectViewID: view.ID,
-				sortBy:        taskPropertyPosition,
-				orderBy:       orderAscending,
-			})
-		}
+		ensurePositionSort(opts, view.ID)
+	}
+
+	// Labeled views dispatch to GetLabeledViewGroups, which returns its own
+	// response shape. This branch is reached by both regular users and link
+	// shares; GetLabeledViewGroups enforces project read access via CanRead.
+	if view != nil && view.ViewKind == ProjectViewKindLabeled {
+		return readLabeledView(s, a, tf, view, page)
 	}
 
 	shareAuth, is := a.(*LinkSharing)
@@ -396,4 +390,40 @@ func (tf *TaskCollection) ReadAll(s *xorm.Session, a web.Auth, search string, pa
 	}
 
 	return getTaskOrTasksInBuckets(s, a, projects, view, opts, filteringForBucket)
+}
+
+// readLabeledView dispatches a TaskCollection.ReadAll call to the labeled
+// view implementation. Extracted from ReadAll to keep that function under
+// gocyclo's complexity limit. Both regular users and link shares resolve to
+// a single project here; GetLabeledViewGroups enforces project read access.
+func readLabeledView(s *xorm.Session, a web.Auth, tf *TaskCollection, view *ProjectView, page int) (result interface{}, resultCount int, totalItems int64, err error) {
+	var project *Project
+	if shareAuth, is := a.(*LinkSharing); is {
+		project, err = GetProjectSimpleByID(s, shareAuth.ProjectID)
+	} else {
+		project, err = GetProjectSimpleByID(s, tf.ProjectID)
+	}
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	resp, err := GetLabeledViewGroups(s, project, view, tf, a, page)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	return resp, len(resp.Groups), int64(len(resp.Groups)), nil
+}
+
+// ensurePositionSort appends a default `position asc` sort parameter for the
+// given view when the caller hasn't already requested a position sort.
+func ensurePositionSort(opts *taskSearchOptions, viewID int64) {
+	for _, param := range opts.sortby {
+		if param.sortBy == taskPropertyPosition {
+			return
+		}
+	}
+	opts.sortby = append(opts.sortby, &sortParam{
+		projectViewID: viewID,
+		sortBy:        taskPropertyPosition,
+		orderBy:       orderAscending,
+	})
 }

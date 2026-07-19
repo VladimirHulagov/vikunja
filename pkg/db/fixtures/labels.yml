@@ -43,3 +43,21 @@
   created_by_id: 1
   updated: 2018-12-02 15:13:12
   created: 2018-12-01 15:13:12
+# --- Labeled view test labels (project 100, owner user 100) ---
+# Title ordering is deliberate so title_asc / title_desc sorts are stable:
+# 'AA Label' < 'BB Label' < 'ZZ Label'.
+- id: 100
+  title: 'AA Label'
+  created_by_id: 100
+  updated: 2018-12-02 15:13:12
+  created: 2018-12-01 15:13:12
+- id: 101
+  title: 'BB Label'
+  created_by_id: 100
+  updated: 2018-12-02 15:13:12
+  created: 2018-12-01 15:13:12
+- id: 102
+  title: 'ZZ Label'
+  created_by_id: 100
+  updated: 2018-12-02 15:13:12
+  created: 2018-12-01 15:13:12

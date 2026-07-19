@@ -1007,3 +1007,55 @@
   updated: '2024-03-18 15:14:13'
   created: '2018-03-18 15:14:13'
   bucket_configuration_mode: 1
+# --- Labeled view fixtures (view_kind: 4 = ProjectViewKindLabeled) ---
+# All on project 100 (owned by user 100, see projects.yml). The labeled
+# fixtures don't touch project 1 to avoid disturbing TestTaskCollection_ReadAll.
+# 1000: default `done = false` filter, groups sorted by task_count.
+- id: 1000
+  title: Labeled
+  project_id: 100
+  view_kind: 4
+  filter: '{"filter":"done = false"}'
+  bucket_configuration_sort_by: task_count
+  position: 5
+  updated: '2024-03-18 15:14:13'
+  created: '2018-03-18 15:14:13'
+# 1001: same but groups sorted alphabetically by label title (asc).
+- id: 1001
+  title: 'Labeled (title asc)'
+  project_id: 100
+  view_kind: 4
+  filter: '{"filter":"done = false"}'
+  bucket_configuration_sort_by: title_asc
+  position: 6
+  updated: '2024-03-18 15:14:13'
+  created: '2018-03-18 15:14:13'
+# 1002: same but groups sorted alphabetically by label title (desc).
+- id: 1002
+  title: 'Labeled (title desc)'
+  project_id: 100
+  view_kind: 4
+  filter: '{"filter":"done = false"}'
+  bucket_configuration_sort_by: title_desc
+  position: 7
+  updated: '2024-03-18 15:14:13'
+  created: '2018-03-18 15:14:13'
+# 1003: no done filter — done task #106 is included.
+- id: 1003
+  title: 'Labeled (no done filter)'
+  project_id: 100
+  view_kind: 4
+  bucket_configuration_sort_by: task_count
+  position: 8
+  updated: '2024-03-18 15:14:13'
+  created: '2018-03-18 15:14:13'
+# 1004: only done tasks — only task #106 matches.
+- id: 1004
+  title: 'Labeled (done only)'
+  project_id: 100
+  view_kind: 4
+  filter: '{"filter":"done = true"}'
+  bucket_configuration_sort_by: task_count
+  position: 9
+  updated: '2024-03-18 15:14:13'
+  created: '2018-03-18 15:14:13'

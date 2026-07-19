@@ -58,7 +58,9 @@ func TestListUsers(t *testing.T) {
 
 		all, err := user.ListAllUsers(s)
 		require.NoError(t, err)
-		assert.Len(t, all, 20)
+		// 20 base fixture users + 1 (user 100, owner of the labeled-view
+		// test project; see fixtures/users.yml).
+		assert.Len(t, all, 21)
 	})
 	t.Run("no search term", func(t *testing.T) {
 		db.LoadAndAssertFixtures(t)

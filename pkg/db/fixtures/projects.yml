@@ -393,3 +393,15 @@
   position: 4300
   updated: 2018-12-02 15:13:12
   created: 2018-12-01 15:13:12
+# --- Labeled view test project ---
+# Owned exclusively by user 100. No other user has access via users_projects
+# or team_projects, which keeps the fixtures invisible to TestProject_ReadAll
+# (user 1 / user 6) and TestTaskCollection_ReadAll (user 1).
+-
+  id: 100
+  title: Labeled View Test Project
+  description: Fixtures for TestGetLabeledViewGroups_*
+  owner_id: 100
+  position: 100
+  updated: 2018-12-02 15:13:12
+  created: 2018-12-01 15:13:12
