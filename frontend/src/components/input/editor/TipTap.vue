@@ -767,9 +767,17 @@ onBeforeUnmount(() => {
 	}
 })
 
+function renderMarkdownIfNecessary(value: string): string {
+	if (!value) return value
+	const trimmed = value.trim()
+	if (trimmed.startsWith('<')) return value
+	return marked.parse(trimmed) as string
+}
+
 function setModeAndValue(value: string) {
 	internalMode.value = isEditorContentEmpty(value) ? 'edit' : 'preview'
-	editor.value?.commands.setContent(value, {
+	const content = renderMarkdownIfNecessary(value)
+	editor.value?.commands.setContent(content, {
 		...defaultSetContentOptions,
 		emitUpdate: false,
 	})

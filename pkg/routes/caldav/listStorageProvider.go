@@ -751,6 +751,18 @@ func (vcls *VikunjaCaldavProjectStorage) getProjectRessource(isCollection bool) 
 		return
 	}
 
+	// When project.ID == 0, this is an aggregate path (e.g. /dav/projects/) without
+	// a specific project selected. Return an empty collection adapter so that REPORT
+	// requests return an empty multistatus (207) instead of 404.
+	// See https://community.vikunja.io/t/davx5-client-shows-an-additional-collection-calendar/1951
+	if vcls.project.ID == 0 {
+		rr = VikunjaProjectResourceAdapter{
+			project:      vcls.project,
+			isCollection: isCollection,
+		}
+		return
+	}
+
 	can, _, err := vcls.project.CanRead(s, vcls.user)
 	if err != nil {
 		_ = s.Rollback()
