@@ -15,6 +15,7 @@ export interface TaskFilterParams {
 	s: string,
 	per_page?: number,
 	expand?: ExpandTaskFilterParam,
+	category?: number,
 }
 
 export function getDefaultTaskFilterParams(): TaskFilterParams {

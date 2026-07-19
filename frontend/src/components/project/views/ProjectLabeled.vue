@@ -13,6 +13,11 @@
 				>
 					{{ $t('project.labeled.hideDone') }}
 				</FancyCheckbox>
+				<LabelCategoryModal
+					v-if="!projectIsSavedFilter"
+					:project-id="projectId"
+					@changed="onCategoriesChanged"
+				/>
 				<FilterPopup
 					v-if="!projectIsSavedFilter"
 					v-model="params"
@@ -25,6 +30,11 @@
 
 		<template #default>
 			<div class="labeled-view">
+				<LabelCategoryCloud
+					:project-id="projectId"
+					:active-category-id="activeCategoryId"
+					@select="onSelectCategory"
+				/>
 				<div
 					:class="{ 'is-loading': isLoading }"
 					class="labeled labeled-columns-container loader-container"
@@ -146,6 +156,8 @@ import {useProjectStore} from '@/stores/projects'
 
 import ProjectWrapper from '@/components/project/ProjectWrapper.vue'
 import FilterPopup from '@/components/project/partials/FilterPopup.vue'
+import LabelCategoryCloud from '@/components/project/labelCategories/LabelCategoryCloud.vue'
+import LabelCategoryModal from '@/components/project/labelCategories/LabelCategoryModal.vue'
 import KanbanCard from '@/components/tasks/partials/KanbanCard.vue'
 import XButton from '@/components/input/Button.vue'
 import FancyCheckbox from '@/components/input/FancyCheckbox.vue'
@@ -225,6 +237,40 @@ function hasMoreTasks(group: ILabeledGroup): boolean {
 // URL-synchronized filter parameters — same pattern as ProjectKanban.
 const filter = useRouteQuery('filter')
 const s = useRouteQuery('s')
+const categoryQuery = useRouteQuery('category')
+
+function parseCategory(value: string | string[] | undefined | null): number {
+	if (value === undefined || value === null) return 0
+	const raw = Array.isArray(value) ? value[0] : value
+	if (raw === undefined || raw === null || raw === '') return 0
+	const parsed = Number.parseInt(String(raw), 10)
+	if (Number.isNaN(parsed)) return 0
+	return parsed
+}
+
+const activeCategoryId = ref<number>(parseCategory(categoryQuery.value))
+
+watch(categoryQuery, (value) => {
+	activeCategoryId.value = parseCategory(value)
+})
+
+function onSelectCategory(id: number) {
+	activeCategoryId.value = id
+	// `useRouteQuery` treats `undefined` as "remove the param"; we keep 0
+	// out of the URL to keep shares clean.
+	categoryQuery.value = id === 0 ? undefined : String(id)
+}
+
+function onCategoriesChanged() {
+	// Reload groups so the columns reflect any category membership changes.
+	// The cloud reloads itself from the store on its own.
+	if (projectId.value) {
+		labeledStore.loadGroups(projectId.value, props.viewId, {
+			...params.value,
+			category: activeCategoryId.value,
+		})
+	}
+}
 
 const params = ref<TaskFilterParams>({
 	sort_by: [],
@@ -277,12 +323,16 @@ watch(
 		params: params.value,
 		projectId: projectId.value,
 		viewId: props.viewId,
+		categoryId: activeCategoryId.value,
 	}),
-	({params, projectId, viewId}) => {
+	({params, projectId, viewId, categoryId}) => {
 		if (projectId === undefined || Number(projectId) === 0) {
 			return
 		}
-		labeledStore.loadGroups(projectId, viewId, params)
+		labeledStore.loadGroups(projectId, viewId, {
+			...params,
+			category: categoryId,
+		})
 	},
 	{immediate: true, deep: true},
 )
@@ -400,7 +450,10 @@ async function loadMore(group: ILabeledGroup) {
 	}
 	isLoadingMore.value = true
 	try {
-		await labeledStore.loadMoreForGroup(projectId.value, props.viewId, key, params.value)
+		await labeledStore.loadMoreForGroup(projectId.value, props.viewId, key, {
+			...params.value,
+			category: activeCategoryId.value,
+		})
 	} finally {
 		isLoadingMore.value = false
 	}

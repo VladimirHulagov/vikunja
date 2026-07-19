@@ -515,7 +515,23 @@
 			"emptyState": "No tasks. Add a task or assign tags to existing tasks.",
 			"addTaskPlaceholder": "Add a task in this column...",
 			"loadMore": "Load more",
-			"hideDone": "Hide done"
+			"hideDone": "Hide done",
+			"columns": "Columns",
+			"categories": {
+				"title": "Manage label groups",
+				"add": "Add group",
+				"all": "All labels",
+				"uncategorized": "Uncategorized",
+				"nameLabel": "Name",
+				"namePlaceholder": "Group name",
+				"labels": "Labels",
+				"save": "Save",
+				"cancel": "Cancel",
+				"edit": "Edit",
+				"delete": "Delete",
+				"deleteConfirm": "Delete group \"{title}\"? The labels themselves are not removed.",
+				"empty": "No groups yet. Create one."
+			}
 		},
     "pseudo": {
       "favorites": {
