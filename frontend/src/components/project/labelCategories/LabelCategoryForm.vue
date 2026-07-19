@@ -67,7 +67,7 @@ import {computed, onMounted, ref} from 'vue'
 
 import XButton from '@/components/input/Button.vue'
 
-import {useLabelStore} from '@/stores/labels'
+import {useLabeledStore} from '@/stores/labeled'
 import {useLabelCategoriesStore} from '@/stores/labelCategories'
 
 import {error as showError} from '@/message'
@@ -85,7 +85,7 @@ const emit = defineEmits<{
 	cancel: [],
 }>()
 
-const labelStore = useLabelStore()
+const labeledStore = useLabeledStore()
 const categoriesStore = useLabelCategoriesStore()
 
 const title = ref('')
@@ -94,24 +94,35 @@ const isSaving = ref(false)
 
 const isEditMode = computed(() => !!props.category && typeof props.category.id === 'number' && props.category.id > 0)
 
+// Available labels = labels actually used by tasks in this project.
+// We read them from the labeled store (which mirrors the columns the user
+// sees in the Labeled view) so we don't pull in labels from other projects.
+// Vikunja labels are user-scoped, not project-scoped — `label.projectId` is
+// the origin project, not the using project — so filtering the global label
+// store by `projectId` would be wrong.
 const projectLabels = computed<ILabel[]>(() => {
-	// Vikunja labels are user-scoped (created by a user, usable on any task).
-	// The `projectId` field on a label is just where it was originally created,
-	// not where it's used. Show the user's full label library so they can pick
-	// any of their existing labels for this category.
-	return (labelStore.labelsArray as readonly ILabel[]) as ILabel[]
+	const seen = new Map<number, ILabel>()
+	for (const group of labeledStore.groups ?? []) {
+		const label = group?.label
+		if (label && label.id && !seen.has(label.id)) {
+			seen.set(label.id, label)
+		}
+	}
+	// Also surface any labels already on this category even if they're
+	// somehow not in the current view (e.g. filtered out by done filter).
+	if (props.category?.labels) {
+		for (const label of props.category.labels) {
+			if (label?.id && !seen.has(label.id)) {
+				seen.set(label.id, label)
+			}
+		}
+	}
+	return Array.from(seen.values())
 })
 
 const canSave = computed(() => title.value.trim() !== '')
 
 onMounted(async () => {
-	// Make sure all labels are available for selection.
-	try {
-		await labelStore.loadAllLabels()
-	} catch (e) {
-		showError(e)
-	}
-
 	if (props.category) {
 		title.value = props.category.title ?? ''
 		selectedLabelIds.value = new Set(

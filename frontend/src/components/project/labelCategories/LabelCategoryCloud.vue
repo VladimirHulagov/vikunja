@@ -140,6 +140,7 @@ watch(() => props.projectId, reload)
 	border-radius: $radius;
 	border: 1px solid var(--grey-300);
 	background: var(--grey-100);
+	color: var(--text);
 	cursor: pointer;
 	font-size: .85rem;
 
@@ -149,13 +150,14 @@ watch(() => props.projectId, reload)
 
 	&.is-active {
 		background: var(--primary);
-		color: var(--grey-900);
+		color: var(--text-invert);
 		border-color: var(--primary);
 		font-weight: 600;
 	}
 
 	.count {
-		background: rgba(0, 0, 0, .08);
+		background: var(--grey-200);
+		color: var(--text-light);
 		border-radius: $radius;
 		padding: 0 .35rem;
 		font-size: .75rem;

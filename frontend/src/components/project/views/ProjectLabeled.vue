@@ -151,6 +151,7 @@ import type {TaskFilterParams} from '@/services/taskCollection'
 
 import {useBaseStore} from '@/stores/base'
 import {useLabeledStore} from '@/stores/labeled'
+import {useLabelCategoriesStore} from '@/stores/labelCategories'
 import {useTaskStore} from '@/stores/tasks'
 import {useProjectStore} from '@/stores/projects'
 
@@ -174,6 +175,7 @@ const projectId = toRef(props, 'projectId')
 
 const baseStore = useBaseStore()
 const labeledStore = useLabeledStore()
+const categoriesStore = useLabelCategoriesStore()
 const taskStore = useTaskStore()
 const projectStore = useProjectStore()
 
@@ -262,9 +264,12 @@ function onSelectCategory(id: number) {
 }
 
 function onCategoriesChanged() {
-	// Reload groups so the columns reflect any category membership changes.
-	// The cloud reloads itself from the store on its own.
+	// Reload both the category list (so the cloud above the columns refreshes)
+	// and the task groups (so the columns reflect any category membership
+	// changes). The modal updates the store itself, but we re-load explicitly
+	// to be safe against any reactive edge cases.
 	if (projectId.value) {
+		categoriesStore.load(projectId.value)
 		labeledStore.loadGroups(projectId.value, props.viewId, {
 			...params.value,
 			category: activeCategoryId.value,
