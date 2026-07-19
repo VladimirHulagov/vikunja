@@ -71,6 +71,8 @@ func GetTables() []interface{} {
 		&TaskUnreadStatus{},
 		&Session{},
 		&OAuthCode{},
+		&LabelCategory{},
+		&LabelCategoryMember{},
 	}
 }
 

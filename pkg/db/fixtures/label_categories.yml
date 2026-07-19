@@ -1,0 +1,29 @@
+# Label categories for the Labeled view feature.
+#
+# - Categories 1 and 2 live on project 100 (owner user 100) so they sit
+#   alongside the existing labeled-view fixtures (labels 100-102) and stay
+#   isolated from the project 1 / user 1 assertions in TestTaskCollection_ReadAll
+#   and friends.
+# - Category 3 lives on project 1 (owner user 1) and is used only to prove that
+#   ReadAll scopes results to the requested project.
+- id: 1
+  title: 'Rooms'
+  project_id: 100
+  position: 100
+  created_by_id: 100
+  updated: 2018-12-02 15:13:12
+  created: 2018-12-01 15:13:12
+- id: 2
+  title: 'Work Types'
+  project_id: 100
+  position: 200
+  created_by_id: 100
+  updated: 2018-12-02 15:13:12
+  created: 2018-12-01 15:13:12
+- id: 3
+  title: 'Project1 Category'
+  project_id: 1
+  position: 100
+  created_by_id: 1
+  updated: 2018-12-02 15:13:12
+  created: 2018-12-01 15:13:12

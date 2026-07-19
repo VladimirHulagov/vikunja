@@ -1,0 +1,21 @@
+# Join rows tying labels into label categories.
+#
+# - Rooms (category 1, project 100) holds labels 100 and 101.
+# - Work Types (category 2, project 100) holds label 102.
+# - Project1 Category (category 3, project 1) holds label 1.
+- id: 1
+  label_category_id: 1
+  label_id: 100
+  created: 2018-12-01 15:13:12
+- id: 2
+  label_category_id: 1
+  label_id: 101
+  created: 2018-12-01 15:13:12
+- id: 3
+  label_category_id: 2
+  label_id: 102
+  created: 2018-12-01 15:13:12
+- id: 4
+  label_category_id: 3
+  label_id: 1
+  created: 2018-12-01 15:13:12

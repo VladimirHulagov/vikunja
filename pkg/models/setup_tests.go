@@ -51,6 +51,8 @@ func SetupTests() {
 		"files",
 		"label_tasks",
 		"labels",
+		"label_categories",
+		"label_category_members",
 		"link_shares",
 		"projects",
 		"task_assignees",

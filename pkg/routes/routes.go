@@ -799,6 +799,9 @@ func registerAPIRoutes(a *echo.Group) {
 	}
 	a.POST("/projects/:project/views/:view/buckets/:bucket/tasks", taskBucketProvider.UpdateWeb)
 
+	// Label categories (Labeled view grouping)
+	apiv1.RegisterLabelCategoryRoutes(a)
+
 	admin := a.Group("/admin",
 		RequireFeature(license.FeatureAdminPanel),
 		RequireInstanceAdmin(),
