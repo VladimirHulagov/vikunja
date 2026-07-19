@@ -61,3 +61,12 @@
   created_by_id: 100
   updated: 2018-12-02 15:13:12
   created: 2018-12-01 15:13:12
+# Uncategorized label (intentionally NOT in any label_category) so the
+# category=-1 ("Без категории") filter has a non-empty result to assert on.
+# Attached to task #102 (which also carries label 100) to keep the multi-label
+# bucketing honest under every category filter.
+- id: 103
+  title: 'CC Label'
+  created_by_id: 100
+  updated: 2018-12-02 15:13:12
+  created: 2018-12-01 15:13:12

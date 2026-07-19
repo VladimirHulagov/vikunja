@@ -63,9 +63,19 @@ type LabeledViewResponse struct {
 // A multi-label task appears in EVERY matching group. Tasks with no labels at
 // all are collected into UntaggedGroup, which is nil when no such tasks match.
 //
+// labelCategoryID narrows which labels are eligible to form a group:
+//
+//	0  — every label is eligible (default; existing behaviour preserved).
+//	>0 — only labels that are members of this LabelCategory.
+//	-1 — only labels that are NOT in any LabelCategory of this project
+//	     (the virtual "Без категории" chip).
+//
+// When labelCategoryID != 0 the UntaggedGroup is suppressed (left nil) even if
+// untagged tasks match the filter — the user is focusing on categorized work.
+//
 // Paginates labeledViewTasksPerGroup tasks per group; page is 1-based and
 // defaults to 1 when zero or negative.
-func GetLabeledViewGroups(s *xorm.Session, project *Project, view *ProjectView, taskCollection *TaskCollection, auth web.Auth, page int) (*LabeledViewResponse, error) {
+func GetLabeledViewGroups(s *xorm.Session, project *Project, view *ProjectView, taskCollection *TaskCollection, auth web.Auth, page int, labelCategoryID int64) (*LabeledViewResponse, error) {
 	// 1. Permission check — project read access is required. This also
 	// covers link shares and inherited team memberships because it goes
 	// through the same CanRead used by every other view.
@@ -146,6 +156,16 @@ func GetLabeledViewGroups(s *xorm.Session, project *Project, view *ProjectView, 
 	for id := range tasksByLabel {
 		labelIDs = append(labelIDs, id)
 	}
+	// 6a. When a category filter is active, narrow the candidate label set
+	// before fetching rows. tasksByLabel still holds buckets for filtered-out
+	// labels; those buckets simply never get turned into groups because their
+	// ids are absent from the filtered slice.
+	if labelCategoryID != 0 {
+		labelIDs, err = filterLabeledViewLabelsByCategory(s, project.ID, labelCategoryID, labelIDs)
+		if err != nil {
+			return nil, err
+		}
+	}
 	labels := make([]*Label, 0, len(labelIDs))
 	if len(labelIDs) > 0 {
 		err = s.In("id", labelIDs).OrderBy("id asc").Find(&labels)
@@ -187,9 +207,11 @@ func GetLabeledViewGroups(s *xorm.Session, project *Project, view *ProjectView, 
 	// 8. Sort groups per view.BucketConfigurationSortBy.
 	sortLabeledGroups(groups, view.BucketConfigurationSortBy)
 
-	// 9. Untagged pseudo-group (only if there are untagged tasks).
+	// 9. Untagged pseudo-group (only if there are untagged tasks). Suppressed
+	// entirely when a category filter is active: the user is focusing on
+	// categorized work, so tasks with no labels are out of scope.
 	var untaggedGroup *LabeledGroup
-	if len(untagged) > 0 {
+	if labelCategoryID == 0 && len(untagged) > 0 {
 		untaggedGroup = &LabeledGroup{
 			Label:     nil,
 			TaskCount: int64(len(untagged)),
@@ -201,6 +223,73 @@ func GetLabeledViewGroups(s *xorm.Session, project *Project, view *ProjectView, 
 		Groups:        groups,
 		UntaggedGroup: untaggedGroup,
 	}, nil
+}
+
+// filterLabeledViewLabelsByCategory restricts the candidate label id set
+// produced by in-memory bucketing according to the active category filter.
+//
+//	labelCategoryID > 0: keep only labels that are members of this category.
+//	labelCategoryID == -1: keep only labels NOT in any LabelCategory of the
+//	                       given project (the virtual "uncategorized" chip).
+//
+// labelCategoryID == 0 is handled by the caller (no filtering) and never
+// reaches this function. An empty labelIDs input short-circuits to an empty
+// result without hitting the database.
+//
+// The "is in any category of this project" set is computed with two small
+// queries instead of a SQL JOIN so the helper stays dialect-agnostic across
+// SQLite/MySQL/PostgreSQL and readable.
+func filterLabeledViewLabelsByCategory(s *xorm.Session, projectID, labelCategoryID int64, labelIDs []int64) ([]int64, error) {
+	if len(labelIDs) == 0 {
+		return labelIDs, nil
+	}
+
+	if labelCategoryID > 0 {
+		members := []*LabelCategoryMember{}
+		if err := s.
+			Where("label_category_id = ?", labelCategoryID).
+			In("label_id", labelIDs).
+			Find(&members); err != nil {
+			return nil, err
+		}
+		out := make([]int64, 0, len(members))
+		for _, m := range members {
+			out = append(out, m.LabelID)
+		}
+		return out, nil
+	}
+
+	// labelCategoryID == -1: uncategorized = NOT IN any category of this project.
+	cats := []*LabelCategory{}
+	if err := s.Where("project_id = ?", projectID).Find(&cats); err != nil {
+		return nil, err
+	}
+	if len(cats) == 0 {
+		// Project has no categories → every label is uncategorized.
+		return labelIDs, nil
+	}
+	catIDs := make([]int64, 0, len(cats))
+	for _, c := range cats {
+		catIDs = append(catIDs, c.ID)
+	}
+	members := []*LabelCategoryMember{}
+	if err := s.
+		In("label_category_id", catIDs).
+		In("label_id", labelIDs).
+		Find(&members); err != nil {
+		return nil, err
+	}
+	excluded := make(map[int64]bool, len(members))
+	for _, m := range members {
+		excluded[m.LabelID] = true
+	}
+	out := make([]int64, 0, len(labelIDs))
+	for _, id := range labelIDs {
+		if !excluded[id] {
+			out = append(out, id)
+		}
+	}
+	return out, nil
 }
 
 // mergeLabeledViewFilters ANDs together the view's saved filter and the

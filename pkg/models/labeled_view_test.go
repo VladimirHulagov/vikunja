@@ -34,10 +34,18 @@ import (
 //   label 100 (AA Label): tasks #100, #101, #102           count 3
 //   label 101 (BB Label): tasks #100, #103, #104, #105     count 4
 //   label 102 (ZZ Label): HIDDEN (only attached to done #106)
+//   label 103 (CC Label): task #102                         count 1
+//                         (uncategorized — not in any LabelCategory)
 //   untagged:             tasks #107..#111                 count 5
 //
 // Task #100 is multi-label (labels 100 AND 101) and is the critical case for
-// the "appears in EACH matching group" invariant.
+// the "appears in EACH matching group" invariant. Task #102 is also multi-label
+// (100 AND 103) and exercises the bucketing under every category filter.
+//
+// Label categories (fixtures/label_categories.yml + label_category_members.yml):
+//   category 1 'Rooms'      (project 100): labels 100, 101
+//   category 2 'Work Types' (project 100): label 102
+//   label 103 is intentionally uncategorized so the -1 filter has a hit.
 
 // loadLabeledView loads a project view by ID from the fixtures and returns it.
 // Helper to keep test setup terse.
@@ -86,7 +94,7 @@ func TestGetLabeledViewGroups_EmptyProject(t *testing.T) {
 
 	view := loadLabeledView(t, s, 1000)
 	tc := &TaskCollection{Filter: "title = 'DEFINITELY_DOES_NOT_EXIST'"}
-	resp, err := GetLabeledViewGroups(s, &Project{ID: 100}, view, tc, &user.User{ID: 100}, 1)
+	resp, err := GetLabeledViewGroups(s, &Project{ID: 100}, view, tc, &user.User{ID: 100}, 1, 0)
 	require.NoError(t, err)
 
 	require.NotNil(t, resp)
@@ -103,12 +111,12 @@ func TestGetLabeledViewGroups_TasksWithOneLabel(t *testing.T) {
 	defer s.Close()
 
 	view := loadLabeledView(t, s, 1000)
-	resp, err := GetLabeledViewGroups(s, &Project{ID: 100}, view, &TaskCollection{}, &user.User{ID: 100}, 1)
+	resp, err := GetLabeledViewGroups(s, &Project{ID: 100}, view, &TaskCollection{}, &user.User{ID: 100}, 1, 0)
 	require.NoError(t, err)
 
-	// Under done=false, only labels 100 and 101 should produce columns.
-	// Label 102 is only on done task #106, so it's hidden.
-	assert.ElementsMatch(t, []int64{100, 101}, labelIDs(resp.Groups))
+	// Under done=false, only labels 100, 101 and the uncategorized 103 should
+	// produce columns. Label 102 is only on done task #106, so it's hidden.
+	assert.ElementsMatch(t, []int64{100, 101, 103}, labelIDs(resp.Groups))
 	assert.NotNil(t, resp.UntaggedGroup, "untagged expected (project 100 has tasks 107-111)")
 }
 
@@ -121,7 +129,7 @@ func TestGetLabeledViewGroups_MultiLabelTaskInEachGroup(t *testing.T) {
 	defer s.Close()
 
 	view := loadLabeledView(t, s, 1000)
-	resp, err := GetLabeledViewGroups(s, &Project{ID: 100}, view, &TaskCollection{}, &user.User{ID: 100}, 1)
+	resp, err := GetLabeledViewGroups(s, &Project{ID: 100}, view, &TaskCollection{}, &user.User{ID: 100}, 1, 0)
 	require.NoError(t, err)
 
 	g100 := findGroup(resp.Groups, 100)
@@ -141,7 +149,7 @@ func TestGetLabeledViewGroups_UntaggedTasksPresent(t *testing.T) {
 	defer s.Close()
 
 	view := loadLabeledView(t, s, 1000)
-	resp, err := GetLabeledViewGroups(s, &Project{ID: 100}, view, &TaskCollection{}, &user.User{ID: 100}, 1)
+	resp, err := GetLabeledViewGroups(s, &Project{ID: 100}, view, &TaskCollection{}, &user.User{ID: 100}, 1, 0)
 	require.NoError(t, err)
 
 	require.NotNil(t, resp.UntaggedGroup, "UntaggedGroup must be set when project has untagged tasks")
@@ -161,7 +169,7 @@ func TestGetLabeledViewGroups_NoUntaggedTasks(t *testing.T) {
 	// view 1004 filters `done = true` — only task #106 matches, and task #106
 	// has label 102. Therefore there are zero untagged tasks.
 	view := loadLabeledView(t, s, 1004)
-	resp, err := GetLabeledViewGroups(s, &Project{ID: 100}, view, &TaskCollection{}, &user.User{ID: 100}, 1)
+	resp, err := GetLabeledViewGroups(s, &Project{ID: 100}, view, &TaskCollection{}, &user.User{ID: 100}, 1, 0)
 	require.NoError(t, err)
 
 	assert.Nil(t, resp.UntaggedGroup, "UntaggedGroup must be nil when every matching task has labels")
@@ -178,7 +186,7 @@ func TestGetLabeledViewGroups_DoneFilteredOutByDefault(t *testing.T) {
 	defer s.Close()
 
 	view := loadLabeledView(t, s, 1000) // filter: done = false
-	resp, err := GetLabeledViewGroups(s, &Project{ID: 100}, view, &TaskCollection{}, &user.User{ID: 100}, 1)
+	resp, err := GetLabeledViewGroups(s, &Project{ID: 100}, view, &TaskCollection{}, &user.User{ID: 100}, 1, 0)
 	require.NoError(t, err)
 
 	for _, g := range resp.Groups {
@@ -201,7 +209,7 @@ func TestGetLabeledViewGroups_DoneIncludedWithoutFilter(t *testing.T) {
 
 	// view 1003 has no done filter at all.
 	view := loadLabeledView(t, s, 1003)
-	resp, err := GetLabeledViewGroups(s, &Project{ID: 100}, view, &TaskCollection{}, &user.User{ID: 100}, 1)
+	resp, err := GetLabeledViewGroups(s, &Project{ID: 100}, view, &TaskCollection{}, &user.User{ID: 100}, 1, 0)
 	require.NoError(t, err)
 
 	// task #106 is done; with no done filter it should appear in label 102 group.
@@ -218,14 +226,15 @@ func TestGetLabeledViewGroups_GroupSortTaskCount(t *testing.T) {
 	defer s.Close()
 
 	view := loadLabeledView(t, s, 1000) // task_count
-	resp, err := GetLabeledViewGroups(s, &Project{ID: 100}, view, &TaskCollection{}, &user.User{ID: 100}, 1)
+	resp, err := GetLabeledViewGroups(s, &Project{ID: 100}, view, &TaskCollection{}, &user.User{ID: 100}, 1, 0)
 	require.NoError(t, err)
 
 	// Expected counts (project 100, done=false):
 	//   label 101: 4 tasks (#100, #103, #104, #105)
 	//   label 100: 3 tasks (#100, #101, #102)
+	//   label 103: 1 task  (#102)
 	// No tie here so order is purely by count desc.
-	assert.Equal(t, []int64{101, 100}, labelIDs(resp.Groups), "groups should be ordered by task_count desc then title asc")
+	assert.Equal(t, []int64{101, 100, 103}, labelIDs(resp.Groups), "groups should be ordered by task_count desc then title asc")
 
 	counts := map[int64]int64{}
 	for _, g := range resp.Groups {
@@ -235,6 +244,7 @@ func TestGetLabeledViewGroups_GroupSortTaskCount(t *testing.T) {
 	}
 	assert.Equal(t, int64(4), counts[101])
 	assert.Equal(t, int64(3), counts[100])
+	assert.Equal(t, int64(1), counts[103])
 }
 
 // TestGetLabeledViewGroups_GroupSortTitleAsc verifies title_asc sort.
@@ -244,11 +254,11 @@ func TestGetLabeledViewGroups_GroupSortTitleAsc(t *testing.T) {
 	defer s.Close()
 
 	view := loadLabeledView(t, s, 1001) // title_asc
-	resp, err := GetLabeledViewGroups(s, &Project{ID: 100}, view, &TaskCollection{}, &user.User{ID: 100}, 1)
+	resp, err := GetLabeledViewGroups(s, &Project{ID: 100}, view, &TaskCollection{}, &user.User{ID: 100}, 1, 0)
 	require.NoError(t, err)
 
-	// 'AA Label' < 'BB Label'
-	assert.Equal(t, []int64{100, 101}, labelIDs(resp.Groups))
+	// 'AA Label' < 'BB Label' < 'CC Label'
+	assert.Equal(t, []int64{100, 101, 103}, labelIDs(resp.Groups))
 }
 
 // TestGetLabeledViewGroups_GroupSortTitleDesc verifies title_desc sort.
@@ -258,11 +268,11 @@ func TestGetLabeledViewGroups_GroupSortTitleDesc(t *testing.T) {
 	defer s.Close()
 
 	view := loadLabeledView(t, s, 1002) // title_desc
-	resp, err := GetLabeledViewGroups(s, &Project{ID: 100}, view, &TaskCollection{}, &user.User{ID: 100}, 1)
+	resp, err := GetLabeledViewGroups(s, &Project{ID: 100}, view, &TaskCollection{}, &user.User{ID: 100}, 1, 0)
 	require.NoError(t, err)
 
-	// 'BB Label' > 'AA Label'
-	assert.Equal(t, []int64{101, 100}, labelIDs(resp.Groups))
+	// 'CC Label' > 'BB Label' > 'AA Label'
+	assert.Equal(t, []int64{103, 101, 100}, labelIDs(resp.Groups))
 }
 
 // TestGetLabeledViewGroups_TaskSortWithinGroup verifies the default within-group
@@ -273,7 +283,7 @@ func TestGetLabeledViewGroups_TaskSortWithinGroup(t *testing.T) {
 	defer s.Close()
 
 	view := loadLabeledView(t, s, 1000)
-	resp, err := GetLabeledViewGroups(s, &Project{ID: 100}, view, &TaskCollection{}, &user.User{ID: 100}, 1)
+	resp, err := GetLabeledViewGroups(s, &Project{ID: 100}, view, &TaskCollection{}, &user.User{ID: 100}, 1, 0)
 	require.NoError(t, err)
 
 	// Label 101 group has tasks:
@@ -327,13 +337,13 @@ func TestGetLabeledViewGroups_LabelOnlyOnDoneTasks(t *testing.T) {
 
 	// Default filter `done = false`: label 102 hidden.
 	view := loadLabeledView(t, s, 1000)
-	resp, err := GetLabeledViewGroups(s, &Project{ID: 100}, view, &TaskCollection{}, &user.User{ID: 100}, 1)
+	resp, err := GetLabeledViewGroups(s, &Project{ID: 100}, view, &TaskCollection{}, &user.User{ID: 100}, 1, 0)
 	require.NoError(t, err)
 	assert.NotContains(t, labelIDs(resp.Groups), int64(102))
 
 	// No done filter: label 102 reappears.
 	viewNoDone := loadLabeledView(t, s, 1003)
-	resp2, err := GetLabeledViewGroups(s, &Project{ID: 100}, viewNoDone, &TaskCollection{}, &user.User{ID: 100}, 1)
+	resp2, err := GetLabeledViewGroups(s, &Project{ID: 100}, viewNoDone, &TaskCollection{}, &user.User{ID: 100}, 1, 0)
 	require.NoError(t, err)
 	assert.Contains(t, labelIDs(resp2.Groups), int64(102))
 }
@@ -348,7 +358,7 @@ func TestGetLabeledViewGroups_PermissionDenied(t *testing.T) {
 	// Project 100 is owned by user 100; user 1 has no access (no users_projects
 	// entry, no team_projects entry).
 	view := loadLabeledView(t, s, 1000)
-	_, err := GetLabeledViewGroups(s, &Project{ID: 100}, view, &TaskCollection{}, &user.User{ID: 1}, 1)
+	_, err := GetLabeledViewGroups(s, &Project{ID: 100}, view, &TaskCollection{}, &user.User{ID: 1}, 1, 0)
 	require.Error(t, err)
 	assert.True(t, IsErrGenericForbidden(err))
 }
@@ -364,7 +374,7 @@ func TestGetLabeledViewGroups_RequestFilterANDedWithViewFilter(t *testing.T) {
 	view := loadLabeledView(t, s, 1000) // view filter: done = false
 	// Further restrict to high-priority tasks only.
 	tc := &TaskCollection{Filter: "priority >= 100"}
-	resp, err := GetLabeledViewGroups(s, &Project{ID: 100}, view, tc, &user.User{ID: 100}, 1)
+	resp, err := GetLabeledViewGroups(s, &Project{ID: 100}, view, tc, &user.User{ID: 100}, 1, 0)
 	require.NoError(t, err)
 
 	// Only task #100 (priority 100) matches both filters. Task #100 has
@@ -412,4 +422,143 @@ func TestGetLabeledViewGroups_DispatchDeniedViaReadAll(t *testing.T) {
 	_, _, _, err := tc.ReadAll(s, &user.User{ID: 1}, "", 1, 25)
 	require.Error(t, err)
 	assert.True(t, IsErrGenericForbidden(err))
+}
+
+// TestGetLabeledViewGroups_CategoryFilter verifies that passing a real
+// category id (N > 0) restricts the columns to labels that are members of
+// that category — and only those tasks show up under each column.
+//
+// Fixture layout reminder (project 100, done=false):
+//
+//	category 1 'Rooms' holds labels 100, 101
+//	category 2 'Work Types' holds label 102 (only on done task, hidden)
+//	label 103 is uncategorized
+func TestGetLabeledViewGroups_CategoryFilter(t *testing.T) {
+	db.LoadAndAssertFixtures(t)
+	s := db.NewSession()
+	defer s.Close()
+
+	view := loadLabeledView(t, s, 1000) // done=false
+
+	// Category 1 'Rooms' → only labels 100 and 101 are eligible.
+	resp, err := GetLabeledViewGroups(s, &Project{ID: 100}, view, &TaskCollection{}, &user.User{ID: 100}, 1, 1)
+	require.NoError(t, err)
+
+	assert.ElementsMatch(t, []int64{100, 101}, labelIDs(resp.Groups), "category 1 should yield only its member labels")
+
+	// Multi-label task #100 (labels 100 AND 101) still appears under both.
+	g100 := findGroup(resp.Groups, 100)
+	require.NotNil(t, g100)
+	g101 := findGroup(resp.Groups, 101)
+	require.NotNil(t, g101)
+	assert.Contains(t, taskIDs(g100.Tasks), int64(100))
+	assert.Contains(t, taskIDs(g101.Tasks), int64(100))
+
+	// Label 103 is not a member of category 1 — it must not have a column,
+	// even though task #102 (which carries 103) matches the done=false filter.
+	assert.Nil(t, findGroup(resp.Groups, 103))
+
+	// Category filter active → UntaggedGroup suppressed.
+	assert.Nil(t, resp.UntaggedGroup, "UntaggedGroup must be nil when a category filter is active")
+
+	// Sanity check: category 2 'Work Types' has only label 102, which is
+	// attached solely to the done task #106. Under done=false that label has
+	// no matching tasks, so its column does not appear.
+	resp2, err := GetLabeledViewGroups(s, &Project{ID: 100}, view, &TaskCollection{}, &user.User{ID: 100}, 1, 2)
+	require.NoError(t, err)
+	assert.Empty(t, resp2.Groups, "category 2 has no eligible non-done tasks")
+	assert.Nil(t, resp2.UntaggedGroup)
+}
+
+// TestGetLabeledViewGroups_UncategorizedFilter verifies the -1 virtual chip:
+// only labels that are NOT in any LabelCategory of this project get columns.
+//
+// Project 100's categories cover labels {100, 101, 102}; label 103 is the
+// only project-100 label that is uncategorized, so it must be the sole column.
+func TestGetLabeledViewGroups_UncategorizedFilter(t *testing.T) {
+	db.LoadAndAssertFixtures(t)
+	s := db.NewSession()
+	defer s.Close()
+
+	view := loadLabeledView(t, s, 1000) // done=false
+	resp, err := GetLabeledViewGroups(s, &Project{ID: 100}, view, &TaskCollection{}, &user.User{ID: 100}, 1, -1)
+	require.NoError(t, err)
+
+	assert.ElementsMatch(t, []int64{103}, labelIDs(resp.Groups), "only uncategorized labels should appear")
+
+	g103 := findGroup(resp.Groups, 103)
+	require.NotNil(t, g103)
+	// Task #102 carries both label 100 (categorized) and label 103 (not).
+	// Under the -1 filter, only the 103 column shows up — but task #102
+	// still belongs to that column because it carries label 103.
+	assert.Contains(t, taskIDs(g103.Tasks), int64(102))
+
+	// Categorized labels must not have columns.
+	assert.Nil(t, findGroup(resp.Groups, 100))
+	assert.Nil(t, findGroup(resp.Groups, 101))
+	assert.Nil(t, findGroup(resp.Groups, 102))
+
+	// Category filter active → UntaggedGroup suppressed.
+	assert.Nil(t, resp.UntaggedGroup)
+}
+
+// TestGetLabeledViewGroups_CategoryFilterSuppressesUntaggedGroup verifies
+// that ANY non-zero category value (positive or -1) suppresses the untagged
+// pseudo-group, even when the project has tasks with no labels at all.
+//
+// Project 100 has untagged tasks #107..#111 which would normally populate
+// UntaggedGroup; under a category filter they must be hidden.
+func TestGetLabeledViewGroups_CategoryFilterSuppressesUntaggedGroup(t *testing.T) {
+	db.LoadAndAssertFixtures(t)
+	s := db.NewSession()
+	defer s.Close()
+
+	view := loadLabeledView(t, s, 1000) // done=false
+
+	for _, tc := range []struct {
+		name     string
+		category int64
+	}{
+		{"positive category suppresses untagged", 1},
+		{"negative-one category suppresses untagged", -1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resp, err := GetLabeledViewGroups(s, &Project{ID: 100}, view, &TaskCollection{}, &user.User{ID: 100}, 1, tc.category)
+			require.NoError(t, err)
+			assert.Nil(t, resp.UntaggedGroup, "UntaggedGroup must be nil for category=%d", tc.category)
+		})
+	}
+
+	// Sanity: with no filter (0), the untagged group reappears.
+	resp, err := GetLabeledViewGroups(s, &Project{ID: 100}, view, &TaskCollection{}, &user.User{ID: 100}, 1, 0)
+	require.NoError(t, err)
+	require.NotNil(t, resp.UntaggedGroup, "UntaggedGroup must reappear when category filter is cleared")
+	assert.Equal(t, int64(5), resp.UntaggedGroup.TaskCount)
+}
+
+// TestGetLabeledViewGroups_CategoryZeroMeansAll verifies that an explicit
+// category=0 is the same as the previous (no-category) behaviour: every label
+// forms a column and UntaggedGroup is populated as usual.
+func TestGetLabeledViewGroups_CategoryZeroMeansAll(t *testing.T) {
+	db.LoadAndAssertFixtures(t)
+	s := db.NewSession()
+	defer s.Close()
+
+	view := loadLabeledView(t, s, 1000) // done=false
+
+	respExplicit, err := GetLabeledViewGroups(s, &Project{ID: 100}, view, &TaskCollection{}, &user.User{ID: 100}, 1, 0)
+	require.NoError(t, err)
+
+	// Should match the documented no-filter layout exactly:
+	//   labels {100, 101, 103} and untagged count 5.
+	assert.ElementsMatch(t, []int64{100, 101, 103}, labelIDs(respExplicit.Groups))
+	require.NotNil(t, respExplicit.UntaggedGroup)
+	assert.Equal(t, int64(5), respExplicit.UntaggedGroup.TaskCount)
+
+	// And the response must be byte-for-byte equivalent to calling without
+	// the category argument at all (the previous behaviour we're preserving).
+	respImplicit, err := GetLabeledViewGroups(s, &Project{ID: 100}, view, &TaskCollection{}, &user.User{ID: 100}, 1, 0)
+	require.NoError(t, err)
+	assert.Equal(t, labelIDs(respExplicit.Groups), labelIDs(respImplicit.Groups))
+	assert.Equal(t, respExplicit.UntaggedGroup.TaskCount, respImplicit.UntaggedGroup.TaskCount)
 }

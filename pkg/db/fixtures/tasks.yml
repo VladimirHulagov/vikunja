@@ -461,6 +461,7 @@
 #   label 100 (AA): #100, #101, #102           (count 3)
 #   label 101 (BB): #100, #103, #104, #105     (count 4)
 #   label 102 (ZZ): hidden (only on done #106)
+#   label 103 (CC): #102                        (count 1; not in any category)
 #   untagged: #107..#111                       (count 5)
 - id: 100
   title: 'labeled task #100 multi-label high prio'

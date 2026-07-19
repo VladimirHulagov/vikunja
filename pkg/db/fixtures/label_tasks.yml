@@ -54,6 +54,13 @@
   task_id: 102
   label_id: 100
   created: 2018-12-01 15:13:12
+# Label 103 (uncategorized) attached to task #102 to validate the
+# category=-1 ("Без категории") filter. Task #102 also carries label 100,
+# making it multi-label so the bucketing invariant is exercised.
+- id: 108
+  task_id: 102
+  label_id: 103
+  created: 2018-12-01 15:13:12
 - id: 104
   task_id: 103
   label_id: 101
