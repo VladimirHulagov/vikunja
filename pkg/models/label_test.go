@@ -26,6 +26,7 @@ import (
 	"code.vikunja.io/api/pkg/user"
 	"code.vikunja.io/api/pkg/web"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/d4l3k/messagediff.v1"
 )
@@ -626,4 +627,109 @@ func TestLabel_Delete(t *testing.T) {
 			}
 		})
 	}
+}
+
+// labelIDsFromReadAll is a helper for the project-filter tests: it asserts
+// the ReadAll result is a []*LabelWithTaskID and returns just the label IDs
+// in the order they came back from the database.
+func labelIDsFromReadAll(t *testing.T, result interface{}) []int64 {
+	t.Helper()
+	labels, ok := result.([]*LabelWithTaskID)
+	require.True(t, ok, "ReadAll result is not []*LabelWithTaskID")
+	ids := make([]int64, 0, len(labels))
+	for _, l := range labels {
+		ids = append(ids, l.ID)
+	}
+	return ids
+}
+
+// TestLabel_ReadAll_FilteredByProject verifies that supplying ProjectIDFilter
+// narrows the result to labels actually attached to tasks in that project,
+// owned by the requesting user. Uses the project-100 / user-100 fixture
+// cluster (see fixtures/labels.yml + label_tasks.yml): labels 100-103 are all
+// created by user 100 and attached to tasks 100-106 in project 100.
+func TestLabel_ReadAll_FilteredByProject(t *testing.T) {
+	db.LoadAndAssertFixtures(t)
+	s := db.NewSession()
+	defer s.Close()
+
+	l := &Label{ProjectIDFilter: 100}
+	result, count, total, err := l.ReadAll(s, &user.User{ID: 100}, "", 1, 0)
+	require.NoError(t, err)
+
+	assert.Equal(t, []int64{100, 101, 102, 103}, labelIDsFromReadAll(t, result))
+	assert.Equal(t, 4, count)
+	assert.Equal(t, int64(4), total)
+}
+
+// TestLabel_ReadAll_NoProjectFilter verifies the existing user-scoped path is
+// preserved when ProjectIDFilter is zero. User 100 owns labels 100-103 and
+// project 100, so the unfiltered result matches the filtered one in this
+// fixture setup — but the code path taken is the legacy GetLabelsByTaskIDs.
+func TestLabel_ReadAll_NoProjectFilter(t *testing.T) {
+	db.LoadAndAssertFixtures(t)
+	s := db.NewSession()
+	defer s.Close()
+
+	l := &Label{}
+	result, _, _, err := l.ReadAll(s, &user.User{ID: 100}, "", 1, 0)
+	require.NoError(t, err)
+
+	// User 100 has no access to any other user's labels and owns 100-103,
+	// so the unfiltered result is exactly those four labels.
+	assert.Equal(t, []int64{100, 101, 102, 103}, labelIDsFromReadAll(t, result))
+}
+
+// TestLabel_ReadAll_ProjectFilterWithSearch verifies the project filter and
+// the search ILIKE compose: only labels matching both predicates come back.
+// Label 101 is titled "BB Label" — the only project-100 label matching "BB".
+func TestLabel_ReadAll_ProjectFilterWithSearch(t *testing.T) {
+	db.LoadAndAssertFixtures(t)
+	s := db.NewSession()
+	defer s.Close()
+
+	l := &Label{ProjectIDFilter: 100}
+	result, count, total, err := l.ReadAll(s, &user.User{ID: 100}, "BB", 1, 0)
+	require.NoError(t, err)
+
+	assert.Equal(t, []int64{101}, labelIDsFromReadAll(t, result))
+	assert.Equal(t, 1, count)
+	assert.Equal(t, int64(1), total)
+}
+
+// TestLabel_ReadAll_ProjectFilterEmpty verifies that a project whose tasks
+// have no labels owned by the requesting user yields an empty result, not an
+// error. Project 1 has label 4 on tasks 1 and 2, but label 4 is owned by
+// user 2 — so user 100's filtered view of project 1 is empty.
+func TestLabel_ReadAll_ProjectFilterEmpty(t *testing.T) {
+	db.LoadAndAssertFixtures(t)
+	s := db.NewSession()
+	defer s.Close()
+
+	l := &Label{ProjectIDFilter: 1}
+	result, count, total, err := l.ReadAll(s, &user.User{ID: 100}, "", 1, 0)
+	require.NoError(t, err)
+
+	assert.Empty(t, labelIDsFromReadAll(t, result))
+	assert.Equal(t, 0, count)
+	assert.Equal(t, int64(0), total)
+}
+
+// TestLabel_ReadAll_ProjectFilterRespectsUserScope verifies the strict
+// user-scope semantics of the project filter: a label created by another user
+// and attached to a task in the queried project must NOT appear in the
+// requesting user's filtered result. User 1 has full access to project 1,
+// but the only label there (#4) is owned by user 2 — so user 1 gets nothing.
+func TestLabel_ReadAll_ProjectFilterRespectsUserScope(t *testing.T) {
+	db.LoadAndAssertFixtures(t)
+	s := db.NewSession()
+	defer s.Close()
+
+	l := &Label{ProjectIDFilter: 1}
+	result, count, total, err := l.ReadAll(s, &user.User{ID: 1}, "", 1, 0)
+	require.NoError(t, err)
+
+	assert.Empty(t, labelIDsFromReadAll(t, result))
+	assert.Equal(t, 0, count)
+	assert.Equal(t, int64(0), total)
 }

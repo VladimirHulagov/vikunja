@@ -17,12 +17,15 @@
 package models
 
 import (
+	"strings"
 	"time"
 
+	"code.vikunja.io/api/pkg/db"
 	"code.vikunja.io/api/pkg/user"
 	"code.vikunja.io/api/pkg/utils"
-
 	"code.vikunja.io/api/pkg/web"
+
+	"xorm.io/builder"
 	"xorm.io/xorm"
 )
 
@@ -45,6 +48,13 @@ type Label struct {
 	Created time.Time `xorm:"created not null" json:"created"`
 	// A timestamp when this label was last updated. You cannot change this value.
 	Updated time.Time `xorm:"updated not null" json:"updated"`
+
+	// ProjectIDFilter, when > 0, restricts ReadAll to labels actually used by
+	// tasks in the given project. Bound from the `project_id` URL query
+	// parameter by the generic web handler (same mechanism TaskCollection
+	// uses for `category`). Not persisted — this is purely a query-binding
+	// helper. Zero (or absent) preserves the existing user-scoped behaviour.
+	ProjectIDFilter int64 `query:"project_id" json:"-" xorm:"-"`
 
 	web.CRUDable    `xorm:"-" json:"-"`
 	web.Permissions `xorm:"-" json:"-"`
@@ -144,11 +154,21 @@ func (l *Label) Delete(s *xorm.Session, _ web.Auth) (err error) {
 // @Param page query int false "The page number. Used for pagination. If not provided, the first page of results is returned."
 // @Param per_page query int false "The maximum number of items per page. Note this parameter is limited by the configured maximum of items per page."
 // @Param s query string false "Search labels by label text."
+// @Param project_id query int false "When set to a project id, only returns labels that are used by at least one task in that project and owned by the current user. Without this parameter all user-accessible labels are returned."
 // @Security JWTKeyAuth
 // @Success 200 {array} models.Label "The labels"
 // @Failure 500 {object} models.Message "Internal error"
 // @Router /labels [get]
 func (l *Label) ReadAll(s *xorm.Session, a web.Auth, search string, page int, perPage int) (ls interface{}, resultCount int, numberOfEntries int64, err error) {
+	// Project-scoped mode: only labels owned by the current user that are
+	// attached to at least one task in the given project. Strict by design —
+	// labels created by other users are not surfaced here even if they are
+	// attached to tasks the user can read. Falls through to the existing
+	// user-scoped path when no project filter is supplied (preserving
+	// backwards compatibility for /labels without the query param).
+	if l.ProjectIDFilter > 0 {
+		return getLabelsForProject(s, l.ProjectIDFilter, a, search, page, perPage)
+	}
 	return GetLabelsByTaskIDs(s, &LabelByTaskIDsOptions{
 		Search:              []string{search},
 		User:                a,
@@ -158,6 +178,82 @@ func (l *Label) ReadAll(s *xorm.Session, a web.Auth, search string, page int, pe
 		GroupByLabelIDsOnly: true,
 		GetForUser:          true,
 	})
+}
+
+// getLabelsForProject returns labels created by the user that are used by at
+// least one task in the given project. Used by Label.ReadAll when the
+// `project_id` query parameter is supplied.
+//
+// The join chain labels → label_tasks → tasks restricts the candidate set to
+// labels actually attached to a task in this project; the created_by_id
+// clause enforces user scope (other users' labels are never surfaced, even
+// when they share the project). An optional ILIKE on labels.title mirrors
+// the search behaviour of the unfiltered path.
+func getLabelsForProject(s *xorm.Session, projectID int64, a web.Auth, search string, page int, perPage int) (ls []*LabelWithTaskID, resultCount int, numberOfEntries int64, err error) {
+	userID := a.GetID()
+
+	cond := builder.And(
+		builder.Expr("tasks.project_id = ?", projectID),
+		builder.Eq{"labels.created_by_id": userID},
+	)
+
+	if search = strings.TrimSpace(search); search != "" {
+		cond = builder.And(cond, db.ILIKE("labels.title", search))
+	}
+
+	limit, start := getLimitFromPageIndex(page, perPage)
+
+	query := s.Table("labels").
+		Select("labels.*").
+		Join("INNER", "label_tasks", "label_tasks.label_id = labels.id").
+		Join("INNER", "tasks", "tasks.id = label_tasks.task_id").
+		Where(cond).
+		GroupBy("labels.id").
+		OrderBy("labels.id ASC")
+	if limit > 0 {
+		query = query.Limit(limit, start)
+	}
+
+	var labels []*LabelWithTaskID
+	if err = query.Find(&labels); err != nil {
+		return
+	}
+
+	if len(labels) == 0 {
+		return []*LabelWithTaskID{}, 0, 0, nil
+	}
+
+	// Resolve creators so CreatedBy matches the unfiltered path. With the
+	// created_by_id filter this is always a single user, but we follow the
+	// same shape as GetLabelsByTaskIDs to keep the response consistent.
+	creatorIDs := make([]int64, 0, len(labels))
+	for _, l := range labels {
+		creatorIDs = append(creatorIDs, l.CreatedByID)
+	}
+	users := make(map[int64]*user.User)
+	if err = s.In("id", creatorIDs).Find(&users); err != nil {
+		return
+	}
+	for _, u := range users {
+		u.Email = ""
+	}
+	for i, l := range labels {
+		if c, ok := users[l.CreatedByID]; ok {
+			labels[i].CreatedBy = c
+		}
+	}
+
+	numberOfEntries, err = s.Table("labels").
+		Select("count(DISTINCT labels.id)").
+		Join("INNER", "label_tasks", "label_tasks.label_id = labels.id").
+		Join("INNER", "tasks", "tasks.id = label_tasks.task_id").
+		Where(cond).
+		Count(&Label{})
+	if err != nil {
+		return
+	}
+
+	return labels, len(labels), numberOfEntries, nil
 }
 
 // ReadOne gets one label
