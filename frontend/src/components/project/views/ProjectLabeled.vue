@@ -7,6 +7,12 @@
 	>
 		<template #header>
 			<div class="filter-container">
+				<FancyCheckbox
+					v-model="hideDone"
+					class="hide-done-toggle"
+				>
+					{{ $t('project.labeled.hideDone') }}
+				</FancyCheckbox>
 				<FilterPopup
 					v-if="!projectIsSavedFilter"
 					v-model="params"
@@ -14,12 +20,6 @@
 					:project-id="projectId"
 					@update:modelValue="updateFilters"
 				/>
-				<FancyCheckbox
-					v-model="hideDone"
-					class="hide-done-toggle"
-				>
-					{{ $t('project.labeled.hideDone') }}
-				</FancyCheckbox>
 			</div>
 		</template>
 
