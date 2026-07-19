@@ -513,7 +513,8 @@
         "titleDesc": "By title (Z-A)"
       },
       "emptyState": "No tasks. Add a task or assign tags to existing tasks.",
-      "addTaskPlaceholder": "Add a task in this column..."
+      "addTaskPlaceholder": "Add a task in this column...",
+      "loadMore": "Load more"
     },
     "pseudo": {
       "favorites": {
