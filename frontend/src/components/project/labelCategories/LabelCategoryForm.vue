@@ -63,11 +63,11 @@
 </template>
 
 <script setup lang="ts">
-import {computed, onMounted, ref} from 'vue'
+import {computed, onMounted, ref, watch} from 'vue'
 
 import XButton from '@/components/input/Button.vue'
 
-import {useLabeledStore} from '@/stores/labeled'
+import {useLabelStore} from '@/stores/labels'
 import {useLabelCategoriesStore} from '@/stores/labelCategories'
 
 import {error as showError} from '@/message'
@@ -85,44 +85,38 @@ const emit = defineEmits<{
 	cancel: [],
 }>()
 
-const labeledStore = useLabeledStore()
+const labelStore = useLabelStore()
 const categoriesStore = useLabelCategoriesStore()
 
 const title = ref('')
 const selectedLabelIds = ref<Set<number>>(new Set())
 const isSaving = ref(false)
 
+// Available labels = labels actually used by tasks in this project, loaded
+// from the project-scoped label endpoint (GET /labels?project_id=N). This
+// replaces the previous workaround that derived the list from
+// labeledStore.groups, which only worked when the Labeled view had been
+// visited and had its groups cached.
+const projectLabels = ref<ILabel[]>([])
+
 const isEditMode = computed(() => !!props.category && typeof props.category.id === 'number' && props.category.id > 0)
 
-// Available labels = labels actually used by tasks in this project.
-// We read them from the labeled store (which mirrors the columns the user
-// sees in the Labeled view) so we don't pull in labels from other projects.
-// Vikunja labels are user-scoped, not project-scoped — `label.projectId` is
-// the origin project, not the using project — so filtering the global label
-// store by `projectId` would be wrong.
-const projectLabels = computed<ILabel[]>(() => {
-	const seen = new Map<number, ILabel>()
-	for (const group of labeledStore.groups ?? []) {
-		const label = group?.label
-		if (label && label.id && !seen.has(label.id)) {
-			seen.set(label.id, label)
-		}
+async function loadProjectLabels() {
+	if (!props.projectId) {
+		projectLabels.value = []
+		return
 	}
-	// Also surface any labels already on this category even if they're
-	// somehow not in the current view (e.g. filtered out by done filter).
-	if (props.category?.labels) {
-		for (const label of props.category.labels) {
-			if (label?.id && !seen.has(label.id)) {
-				seen.set(label.id, label)
-			}
-		}
+	try {
+		projectLabels.value = await labelStore.loadLabelsForProject(props.projectId)
+	} catch {
+		// Surface elsewhere; keep the form usable with whatever it had.
 	}
-	return Array.from(seen.values())
-})
+}
 
 const canSave = computed(() => title.value.trim() !== '')
 
 onMounted(async () => {
+	await loadProjectLabels()
 	if (props.category) {
 		title.value = props.category.title ?? ''
 		selectedLabelIds.value = new Set(
@@ -130,6 +124,8 @@ onMounted(async () => {
 		)
 	}
 })
+
+watch(() => props.projectId, loadProjectLabels)
 
 function isSelected(labelId: number): boolean {
 	return selectedLabelIds.value.has(labelId)
@@ -162,6 +158,18 @@ async function save() {
 
 	const selectedLabels: ILabel[] = projectLabels.value
 		.filter(l => selectedLabelIds.value.has(l.id))
+	// Also include any labels on the existing category that aren't in the
+	// project-scoped list (e.g. they belong to tasks filtered out by the
+	// `done = false` default). Without this, editing a category would
+	// silently strip them.
+	if (props.category?.labels) {
+		const present = new Set(projectLabels.value.map(l => l.id))
+		for (const label of props.category.labels) {
+			if (selectedLabelIds.value.has(label.id) && !present.has(label.id)) {
+				selectedLabels.push(label)
+			}
+		}
+	}
 
 	isSaving.value = true
 	try {
@@ -179,6 +187,9 @@ async function save() {
 				selectedLabels,
 			)
 		}
+		// Drop the project-scoped label cache so the next form open picks
+		// up any membership changes that the backend will recompute.
+		labelStore.invalidateProjectLabels(props.projectId)
 		emit('saved')
 	} catch (e) {
 		showError(e)

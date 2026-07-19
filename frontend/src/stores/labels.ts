@@ -18,8 +18,31 @@ async function getAllLabels(page = 1): Promise<ILabel[]> {
 	}
 }
 
+// Walks every page of project-scoped labels in parallel until the service
+// reports no further pages. Mirrors getAllLabels, but seeds the request with
+// `projectId` so the backend filters to labels actually attached to tasks in
+// that project.
+async function getAllProjectLabels(projectId: number, search: string, page = 1): Promise<ILabel[]> {
+	const labelService = new LabelService()
+	const labels = await labelService.getAll(
+		{},
+		{projectId, s: search},
+		page,
+	) as ILabel[]
+	if (page < labelService.totalPages) {
+		const nextLabels = await getAllProjectLabels(projectId, search, page + 1)
+		return labels.concat(nextLabels)
+	}
+	return labels
+}
+
 export const useLabelStore = defineStore('label', () => {
 	const labels = ref<{ [id: ILabel['id']]: ILabel }>({})
+
+	// Per-project cache of "labels used by tasks in project N". Keyed by
+	// projectId so multiple projects can coexist without trampling each
+	// other. Search results are not cached — only the unfiltered snapshot.
+	const projectLabels = ref<Map<number, ILabel[]>>(new Map())
 
 	// Alphabetically sort the labels
 	const labelsArray = computed(() => Object.values(labels.value)
@@ -30,6 +53,7 @@ export const useLabelStore = defineStore('label', () => {
 	)
 
 	const isLoading = ref(false)
+	const isLoadingProjectLabels = ref(false)
 	
 	const getLabelById = computed(() => {
 		return (labelId: ILabel['id']) => labels.value[labelId]
@@ -69,6 +93,10 @@ export const useLabelStore = defineStore('label', () => {
 		isLoading.value = newIsLoading
 	}
 
+	function setIsLoadingProjectLabels(newIsLoading: boolean) {
+		isLoadingProjectLabels.value = newIsLoading
+	}
+
 	function setLabels(newLabels: ILabel[]) {
 		newLabels.forEach(l => {
 			labels.value[l.id] = l
@@ -96,6 +124,52 @@ export const useLabelStore = defineStore('label', () => {
 			return newLabels
 		} finally {
 			cancel()
+		}
+	}
+
+	/**
+	 * Loads labels that are actually used by tasks in the given project
+	 * (backend: `GET /labels?project_id=N`). Results for the unfiltered
+	 * pass are cached per-project so the picker doesn't re-fetch on every
+	 * open. Search results are returned to the caller but never cached —
+	 * they're strictly ephemeral so a stale query can't poison the picker.
+	 */
+	async function loadLabelsForProject(projectId: number, search: string = ''): Promise<ILabel[]> {
+		if (!projectId) {
+			return []
+		}
+
+		if (!search && projectLabels.value.has(projectId)) {
+			return projectLabels.value.get(projectId)!
+		}
+
+		const cancel = setModuleLoading(setIsLoadingProjectLabels)
+
+		try {
+			const result = await getAllProjectLabels(projectId, search)
+			if (!search) {
+				const newMap = new Map(projectLabels.value)
+				newMap.set(projectId, result)
+				projectLabels.value = newMap
+			}
+			return result
+		} finally {
+			cancel()
+		}
+	}
+
+	/**
+	 * Drops the cached label list for a project (or the whole cache when
+	 * no id is given). Call after creating / deleting / assigning labels
+	 * so the next picker open reflects fresh state.
+	 */
+	function invalidateProjectLabels(projectId?: number) {
+		if (projectId) {
+			const newMap = new Map(projectLabels.value)
+			newMap.delete(projectId)
+			projectLabels.value = newMap
+		} else {
+			projectLabels.value = new Map()
 		}
 	}
 
@@ -144,6 +218,8 @@ export const useLabelStore = defineStore('label', () => {
 		labels: readonly(labels),
 		labelsArray: readonly(labelsArray),
 		isLoading,
+		projectLabels,
+		isLoadingProjectLabels,
 
 		getLabelById,
 		getLabelsByIds,
@@ -155,6 +231,8 @@ export const useLabelStore = defineStore('label', () => {
 		setLabel,
 		removeLabelById,
 		loadAllLabels,
+		loadLabelsForProject,
+		invalidateProjectLabels,
 		deleteLabel,
 		updateLabel,
 		createLabel,

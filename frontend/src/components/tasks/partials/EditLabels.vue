@@ -49,6 +49,7 @@
 
 <script setup lang="ts">
 import {ref, computed, shallowReactive, watch} from 'vue'
+import {useDebounceFn} from '@vueuse/core'
 import {useI18n} from 'vue-i18n'
 
 import LabelModel from '@/models/label'
@@ -66,10 +67,12 @@ import {useLabelStyles} from '@/composables/useLabelStyles'
 const props = withDefaults(defineProps<{
 	modelValue: ILabel[] | undefined
 	taskId?: number
+	projectId?: number
 	disabled?: boolean
 	creatable?: boolean
 }>(), {
 	taskId: 0,
+	projectId: 0,
 	disabled: false,
 	creatable: true,
 })
@@ -83,6 +86,11 @@ const {t} = useI18n({useScope: 'global'})
 const labelTaskService = shallowReactive(new LabelTaskService())
 const labels = ref<ILabel[]>([])
 const query = ref('')
+// Project-scoped label suggestions. Loaded from
+// `labelStore.loadLabelsForProject` (backend: GET /labels?project_id=N) so
+// the picker only shows labels actually attached to tasks in this project
+// — not the full user-scoped label universe.
+const projectLabels = ref<ILabel[]>([])
 
 watch(
 	() => props.modelValue,
@@ -99,12 +107,58 @@ const taskStore = useTaskStore()
 const labelStore = useLabelStore()
 const {getLabelStyles} = useLabelStyles()
 
-const foundLabels = computed(() => labelStore.filterLabelsByQuery(labels.value, query.value))
-const loading = computed(() => labelTaskService.loading || labelStore.isLoading)
+// Filter the cached project labels by the current query string. Strict:
+// when nothing matches, the multiselect shows the inline-create option.
+const foundLabels = computed(() => {
+	const q = query.value.trim().toLowerCase()
+	if (q === '') {
+		return projectLabels.value
+	}
+	return projectLabels.value.filter(l =>
+		l.title.toLowerCase().includes(q) ||
+		(l.description ?? '').toLowerCase().includes(q),
+	)
+})
+
+const loading = computed(() => labelTaskService.loading || labelStore.isLoadingProjectLabels)
+
+async function refreshProjectLabels(search: string = '') {
+	if (!props.projectId) {
+		// No project context (e.g. task not yet persisted). Fall back to an
+		// empty list — the user can still inline-create new labels, which
+		// is the strict-mode expectation anyway.
+		projectLabels.value = []
+		return
+	}
+	try {
+		projectLabels.value = await labelStore.loadLabelsForProject(props.projectId, search)
+	} catch {
+		// Network / permission errors are surfaced by the global axios
+		// interceptor; keep the picker usable with whatever it had.
+	}
+}
+
+// Debounced search trigger so we don't fire a request per keystroke. The
+// 300ms window matches what the FilterAutocomplete extension uses for
+// assignee suggestions.
+const debouncedSearch = useDebounceFn((q: string) => refreshProjectLabels(q), 300)
 
 function findLabel(newQuery: string) {
 	query.value = newQuery
+	debouncedSearch(newQuery)
 }
+
+// (Re)load when the project context or task changes. We always invalidate
+// first so the user sees fresh state after a label was added/removed in a
+// previous editing session — the unfiltered GET is cheap and the cache is
+// only an optimisation for repeat opens within the same session.
+watch(
+	() => props.projectId,
+	() => {
+		refreshProjectLabels()
+	},
+	{immediate: true},
+)
 
 async function addLabel(label: ILabel, showNotification = true) {
 	if (props.taskId === 0) {
@@ -113,6 +167,9 @@ async function addLabel(label: ILabel, showNotification = true) {
 	}
 
 	await taskStore.addLabel({label, taskId: props.taskId})
+	// Invalidate the cache so the next picker open reflects the new
+	// task-label assignment (the label is now "used in this project").
+	labelStore.invalidateProjectLabels(props.projectId)
 	emit('update:modelValue', labels.value)
 	if (showNotification) {
 		success({message: t('task.label.addSuccess')})
@@ -122,6 +179,7 @@ async function addLabel(label: ILabel, showNotification = true) {
 async function removeLabel(label: ILabel) {
 	if (props.taskId !== 0) {
 		await taskStore.removeLabel({label, taskId: props.taskId})
+		labelStore.invalidateProjectLabels(props.projectId)
 	}
 
 	const idx = labels.value.findIndex(l => l.id === label.id)
@@ -141,7 +199,10 @@ async function createAndAddLabel(title: string) {
 		title,
 		hexColor: getRandomColorHex(),
 	}))
-	addLabel(newLabel, false)
+	// addLabel attaches the label to the task AND invalidates the project
+	// cache, which is exactly what we want — the new label is now "used
+	// in this project" and the next picker open should surface it.
+	await addLabel(newLabel, false)
 	labels.value.push(newLabel)
 	success({message: t('task.label.addCreateSuccess')})
 }

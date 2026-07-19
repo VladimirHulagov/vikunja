@@ -329,6 +329,7 @@
 							v-model="task.labels"
 							:disabled="!canWrite"
 							:task-id="taskId"
+							:project-id="task.projectId"
 							:creatable="!authStore.isLinkShareAuth"
 						/>
 					</div>
