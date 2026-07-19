@@ -7,6 +7,7 @@ export const PROJECT_VIEW_KINDS = {
 	GANTT: 'gantt',
 	TABLE: 'table',
 	KANBAN: 'kanban',
+	LABELED: 'labeled',
 } as const
 export type ProjectViewKind = typeof PROJECT_VIEW_KINDS[keyof typeof PROJECT_VIEW_KINDS]
 
@@ -24,6 +25,9 @@ export interface IProjectViewBucketConfiguration {
 	filter: IFilters
 }
 
+export const PROJECT_VIEW_LABELED_SORT_BY = ['task_count', 'title_asc', 'title_desc'] as const
+export type ProjectViewLabeledSortBy = typeof PROJECT_VIEW_LABELED_SORT_BY[number]
+
 export interface IProjectView extends IAbstract {
 	id: number
 	title: string
@@ -37,6 +41,8 @@ export interface IProjectView extends IAbstract {
 	bucketConfiguration: IProjectViewBucketConfiguration[]
 	defaultBucketId: number
 	doneBucketId: number
+
+	bucketConfigurationSortBy?: string
 
 	created: Date
 	updated: Date

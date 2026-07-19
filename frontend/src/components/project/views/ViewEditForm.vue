@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {onBeforeMount, ref} from 'vue'
+import {onBeforeMount, ref, watch} from 'vue'
 
 import type {IProjectView} from '@/modelTypes/IProjectView'
 import type {IFilters} from '@/modelTypes/ISavedFilter'
@@ -31,6 +31,15 @@ const view = ref<IProjectView>()
 
 const labelStore = useLabelStore()
 const projectStore = useProjectStore()
+
+watch(
+	() => view.value?.viewKind,
+	viewKind => {
+		if (view.value && viewKind === 'labeled' && !view.value.bucketConfigurationSortBy) {
+			view.value.bucketConfigurationSortBy = 'task_count'
+		}
+	},
+)
 
 onBeforeMount(() => {
 	const transformFilterFromApi = (filterInput: IFilters): IFilter => {
@@ -154,6 +163,9 @@ function handleBubbleSave() {
 						<option value="kanban">
 							{{ $t('project.kanban.title') }}
 						</option>
+						<option value="labeled">
+							{{ $t('project.labeled.title') }}
+						</option>
 					</select>
 				</div>
 			</template>
@@ -261,6 +273,29 @@ function handleBubbleSave() {
 				</div>
 			</div>
 		</div>
+		<FormField
+			v-if="view.viewKind === 'labeled'"
+			:label="$t('project.labeled.columnSort')"
+		>
+			<template #default="{ id }">
+				<div class="select">
+					<select
+						:id="id"
+						v-model="view.bucketConfigurationSortBy"
+					>
+						<option value="task_count">
+							{{ $t('project.labeled.sortBy.taskCount') }}
+						</option>
+						<option value="title_asc">
+							{{ $t('project.labeled.sortBy.titleAsc') }}
+						</option>
+						<option value="title_desc">
+							{{ $t('project.labeled.sortBy.titleDesc') }}
+						</option>
+					</select>
+				</div>
+			</template>
+		</FormField>
 		<div
 			v-if="showSaveButtons"
 			class="is-flex is-justify-content-end"

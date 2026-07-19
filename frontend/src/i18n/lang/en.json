@@ -503,6 +503,18 @@
       "bucketLimitReached": "You have reached the bucket limit. Remove tasks or increase the limit to add new tasks.",
       "bucketOptions": "Bucket options"
     },
+    "labeled": {
+      "title": "Labeled",
+      "noTags": "No tags",
+      "columnSort": "Column sort",
+      "sortBy": {
+        "taskCount": "By task count",
+        "titleAsc": "By title (A-Z)",
+        "titleDesc": "By title (Z-A)"
+      },
+      "emptyState": "No tasks. Add a task or assign tags to existing tasks.",
+      "addTaskPlaceholder": "Add a task in this column..."
+    },
     "pseudo": {
       "favorites": {
         "title": "Favorites"

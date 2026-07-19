@@ -13,6 +13,7 @@ import ProjectList from '@/components/project/views/ProjectList.vue'
 import ProjectGantt from '@/components/project/views/ProjectGantt.vue'
 import ProjectTable from '@/components/project/views/ProjectTable.vue'
 import ProjectKanban from '@/components/project/views/ProjectKanban.vue'
+import ProjectLabeled from '@/components/project/views/ProjectLabeled.vue'
 
 import {DEFAULT_PROJECT_VIEW_SETTINGS} from '@/modelTypes/IProjectView'
 import {saveProjectToHistory} from '@/modules/projectHistory'
@@ -153,6 +154,12 @@ watchEffect(() => baseStore.setCurrentProjectViewId(props.viewId))
 	/>
 	<ProjectKanban
 		v-if="currentView?.viewKind === 'kanban'"
+		:project-id="projectId"
+		:is-loading-project="isLoadingProject"
+		:view-id
+	/>
+	<ProjectLabeled
+		v-if="currentView?.viewKind === 'labeled'"
 		:project-id="projectId"
 		:is-loading-project="isLoadingProject"
 		:view-id
