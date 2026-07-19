@@ -247,11 +247,9 @@ func (lc *LabelCategory) ReadAll(s *xorm.Session, a web.Auth, search string, pag
 	if search != "" {
 		query = query.And("title LIKE ?", "%"+search+"%")
 	}
-	if perPage > 0 {
-		if page < 0 {
-			page = 0
-		}
-		query = query.Limit(perPage, page*perPage)
+	limit, start := getLimitFromPageIndex(page, perPage)
+	if limit > 0 {
+		query = query.Limit(limit, start)
 	}
 
 	cats := []*LabelCategory{}
