@@ -115,12 +115,31 @@ vi.mock('@/stores/labels', () => ({
 	useLabelStore: () => labelStoreMock,
 }))
 
+// The cloud derives "project labels" from labeledStore.groups (labels that
+// appear as columns in the Labeled view = labels actually used by tasks in
+// the project). Mock it as an empty array by default; individual tests
+// override via `labeledState.groups`.
+type LabeledGroupShape = {label: {id: number} | null, tasks: unknown[]}
+const labeledState = reactive<{groups: LabeledGroupShape[]}>({groups: []})
+const labeledStoreMock = {
+	get groups() {
+		return labeledState.groups
+	},
+	set groups(value: LabeledGroupShape[]) {
+		labeledState.groups = value
+	},
+}
+vi.mock('@/stores/labeled', () => ({
+	useLabeledStore: () => labeledStoreMock,
+}))
+
 import LabelCategoryCloud from '@/components/project/labelCategories/LabelCategoryCloud.vue'
 
 function resetMockStores() {
 	categoriesState.categories = []
 	categoriesState.categorized = new Set()
 	labelsState.labels = []
+	labeledState.groups = []
 	categoryStoreMock.load.mockClear()
 	categoryStoreMock.load.mockResolvedValue([])
 	labelStoreMock.loadAllLabels.mockClear()
@@ -230,11 +249,13 @@ describe('LabelCategoryCloud.vue', () => {
 			]},
 		]
 		categoriesState.categorized = new Set([1, 2])
-		labelsState.labels = [
-			{id: 1, title: 'Kitchen', projectId: 1},
-			{id: 2, title: 'Bath', projectId: 1},
-			{id: 3, title: 'Plumbing', projectId: 1},
-			{id: 4, title: 'Tiles', projectId: 1},
+		// Project labels come from labeledStore.groups (labels actually used as
+		// columns in the Labeled view = labels on tasks in this project).
+		labeledState.groups = [
+			{label: {id: 1, title: 'Kitchen', projectId: 1}, tasks: []},
+			{label: {id: 2, title: 'Bath', projectId: 1}, tasks: []},
+			{label: {id: 3, title: 'Plumbing', projectId: 1}, tasks: []},
+			{label: {id: 4, title: 'Tiles', projectId: 1}, tasks: []},
 		]
 
 		const wrapper = mountComponent()
@@ -251,8 +272,8 @@ describe('LabelCategoryCloud.vue', () => {
 	it('emits -1 when the "Uncategorized" chip is clicked', async () => {
 		categoriesState.categories = []
 		categoriesState.categorized = new Set()
-		labelsState.labels = [
-			{id: 7, title: 'Lonely', projectId: 1},
+		labeledState.groups = [
+			{label: {id: 7, title: 'Lonely', projectId: 1}, tasks: []},
 		]
 
 		const wrapper = mountComponent()
