@@ -170,6 +170,8 @@ function getViewTitle(view: IProjectView) {
 			return t('project.table.title')
 		case 'Kanban':
 			return t('project.kanban.title')
+		case 'Labeled':
+			return t('project.labeled.title')
 	}
 
 	return view.title
