@@ -65,6 +65,7 @@
 					{{ getViewTitle(view) }}
 				</BaseButton>
 			</div>
+			<HideDoneToggle class="switch-view-hide-done" />
 			<slot name="header" />
 		</div>
 		<CustomTransition name="fade">
@@ -92,6 +93,7 @@ import DropdownItem from '@/components/misc/DropdownItem.vue'
 import Icon from '@/components/misc/Icon'
 import Message from '@/components/misc/Message.vue'
 import CustomTransition from '@/components/misc/CustomTransition.vue'
+import HideDoneToggle from '@/components/project/partials/HideDoneToggle.vue'
 
 import {getProjectTitle} from '@/helpers/getProjectTitle'
 import {useTitle} from '@/composables/useTitle'
@@ -192,15 +194,27 @@ function getViewRoute(view: IProjectView) {
 	position: relative;
 	min-block-size: $switch-view-height;
 	margin-block-end: 1rem;
-	
+
 	display: flex;
 	justify-content: space-between;
-	align-items: center;	
+	align-items: center;
 	gap: 1rem;
-	
+
 	@media screen and (max-width: $tablet) {
 		justify-content: center;
-		flex-direction: column;
+	}
+}
+
+// "Hide done" toggle is injected between the view switcher and the
+// per-view #header slot. Nudge it toward the right edge so it sits
+// visually next to FilterPopup-style controls rather than immediately
+// after the switch buttons.
+.switch-view-hide-done {
+	margin-inline-start: auto;
+	flex-shrink: 0;
+
+	@media screen and (max-width: $tablet) {
+		margin-inline-start: 0;
 	}
 }
 
