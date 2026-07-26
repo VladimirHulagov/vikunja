@@ -69,6 +69,14 @@ async function createView() {
 			? newView.value.bucketConfigurationMode
 			: 'none'
 		newView.value.projectId = props.projectId
+		// Place the new view at the end of the existing list (matching the
+		// 100/200/300/... convention used by CreateDefaultViewsForProject).
+		// Without this, position defaults to 0 and the new view sorts first.
+		const maxPosition = views.value.reduce(
+			(max, v) => Math.max(max, v.position ?? 0),
+			0,
+		)
+		newView.value.position = maxPosition + 100
 
 		const result: IProjectView = await projectViewService.create(newView.value)
 		success({message: t('project.views.createSuccess')})
