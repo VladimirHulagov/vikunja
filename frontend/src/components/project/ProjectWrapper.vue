@@ -104,6 +104,7 @@ import {useViewFiltersStore} from '@/stores/viewFilters'
 
 import type {IProject} from '@/modelTypes/IProject'
 import type {IProjectView} from '@/modelTypes/IProjectView'
+import {PROJECT_VIEW_KINDS} from '@/modelTypes/IProjectView'
 
 const props = defineProps<{
 	isLoadingProject: boolean,
@@ -163,16 +164,18 @@ watch(views, () => {
 })
 
 function getViewTitle(view: IProjectView) {
-	switch (view.title) {
-		case 'List':
+	// Switch on the view-kind enum (semantic) rather than view.title (which
+	// is user-editable and may have been renamed away from the default).
+	switch (view.viewKind) {
+		case PROJECT_VIEW_KINDS.LIST:
 			return t('project.list.title')
-		case 'Gantt':
+		case PROJECT_VIEW_KINDS.GANTT:
 			return t('project.gantt.title')
-		case 'Table':
+		case PROJECT_VIEW_KINDS.TABLE:
 			return t('project.table.title')
-		case 'Kanban':
+		case PROJECT_VIEW_KINDS.KANBAN:
 			return t('project.kanban.title')
-		case 'Labeled':
+		case PROJECT_VIEW_KINDS.LABELED:
 			return t('project.labeled.title')
 	}
 
