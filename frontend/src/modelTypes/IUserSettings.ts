@@ -28,6 +28,13 @@ export interface IFrontendSettings {
 	commentSortOrder: 'asc' | 'desc'
 	desktopQuickEntryShortcut: string
 	quickAddDefaultReminders: ITaskReminder[]
+	// User's global preference for hiding done tasks in project views.
+	// The Hide done toggle in ProjectWrapper reads/writes this; on each
+	// project-view mount it forces `done = false` into the URL filter
+	// when the preference is true. Optional because pre-existing users
+	// don't have it set yet — defaults to true (matches Labeled-view
+	// default behavior).
+	hideDoneTasks?: boolean
 }
 
 export interface IExtraSettingsLink {
